@@ -9,22 +9,55 @@ import (
 
 type X struct {
 	ID   uuid.UUID `json:"id"`
+	Type string    `json:"type"`
 	Code int       `json:"code"`
 	Name int       `json:"name"`
 }
 
-func (x X) Field(names ...string) (values []interface{}) {
-	for _, name := range names {
-		switch name {
-		case "id":
-			values = append(values, x.ID)
-		case "code":
-			values = append(values, x.Code)
-		case "name":
-			values = append(values, x.Name)
+func (x X) Field(name string) interface{} {
+	switch name {
+	case "id":
+		return x.ID
+	case "type":
+		return x.Type
+	case "code":
+		return x.Code
+	case "name":
+		return x.Name
+	default:
+		panic(name)
+	}
+}
+
+func BenchmarkCollection_Put(b *testing.B) {
+	collection := Collection{
+		Indexes: []Index{
+			{
+				Field:   []string{"id"},
+				Mapper:  &sync.Map{},
+				Indexer: fmt.Sprint,
+			}, {
+				Field:   []string{"type", "name"},
+				Mapper:  &sync.Map{},
+				Indexer: fmt.Sprint,
+			}, {
+				Field:   []string{"code"},
+				Mapper:  &sync.Map{},
+				Indexer: fmt.Sprint,
+			},
+		},
+	}
+	for i := 0; i < b.N; i++ {
+		cas, ok := collection.Put(X{
+			ID:   uuid.UUID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(i >> 24), byte(i >> 16), byte(i >> 8), byte(i)},
+			Type: "audio",
+			Code: i,
+			Name: i,
+		})
+		if !ok || cas == 0 {
+			b.FailNow()
 		}
 	}
-	return
 }
 
 func TestCollection_Put(t *testing.T) {
@@ -35,7 +68,7 @@ func TestCollection_Put(t *testing.T) {
 				Mapper:  &sync.Map{},
 				Indexer: fmt.Sprint,
 			}, {
-				Field:   []string{"name"},
+				Field:   []string{"type", "name"},
 				Mapper:  &sync.Map{},
 				Indexer: fmt.Sprint,
 			}, {
@@ -59,6 +92,7 @@ func TestCollection_Put(t *testing.T) {
 			args: args{
 				item: X{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae0000"),
+					Type: "audio",
 					Code: 0,
 					Name: 0,
 				},
@@ -70,6 +104,7 @@ func TestCollection_Put(t *testing.T) {
 			args: args{
 				item: X{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae0000"),
+					Type: "audio",
 					Code: 1,
 					Name: 1,
 				},
@@ -81,6 +116,7 @@ func TestCollection_Put(t *testing.T) {
 			args: args{
 				item: X{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
+					Type: "audio",
 					Code: 1,
 					Name: 2,
 				},
@@ -92,6 +128,7 @@ func TestCollection_Put(t *testing.T) {
 			args: args{
 				item: X{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
+					Type: "audio",
 					Code: 0,
 					Name: 3,
 				},
@@ -103,6 +140,7 @@ func TestCollection_Put(t *testing.T) {
 			args: args{
 				item: X{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
+					Type: "audio",
 					Code: 1,
 					Name: 4,
 				},
@@ -114,6 +152,7 @@ func TestCollection_Put(t *testing.T) {
 			args: args{
 				item: X{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
+					Type: "audio",
 					Code: 2,
 					Name: 5,
 				},
@@ -125,6 +164,7 @@ func TestCollection_Put(t *testing.T) {
 			args: args{
 				item: X{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
+					Type: "audio",
 					Code: 5,
 					Name: 5,
 				},

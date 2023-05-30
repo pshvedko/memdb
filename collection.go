@@ -1,6 +1,8 @@
 package memdb
 
 import (
+	"bytes"
+	"fmt"
 	"sync"
 )
 
@@ -12,6 +14,8 @@ type Mapper interface {
 	Delete(key interface{})
 	Range(f func(key, value interface{}) bool)
 }
+
+type Indexer func(...interface{}) string
 
 type Index struct {
 	Indexer
@@ -25,17 +29,19 @@ func (i Index) Put(key string, row *Row) (*Row, string, bool) {
 }
 
 func (i Index) Key(item Item) string {
-	return i.Indexer(item.Field(i.Field...)...)
+	var b bytes.Buffer
+	for _, f := range i.Field {
+		_, _ = fmt.Fprintf(&b, "::%v", item.Field(f))
+	}
+	return i.Indexer(b.String())
 }
-
-type Indexer func(...interface{}) string
 
 type Collection struct {
 	Indexes []Index
 }
 
 type Item interface {
-	Field(...string) []interface{}
+	Field(string) interface{}
 }
 
 type Row struct {
