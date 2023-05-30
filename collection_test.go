@@ -10,7 +10,7 @@ import (
 type X struct {
 	ID   uuid.UUID `json:"id"`
 	Code int       `json:"code"`
-	Name int
+	Name int       `json:"name"`
 }
 
 func (x X) Field(names ...string) (values []interface{}) {
@@ -20,6 +20,8 @@ func (x X) Field(names ...string) (values []interface{}) {
 			values = append(values, x.ID)
 		case "code":
 			values = append(values, x.Code)
+		case "name":
+			values = append(values, x.Name)
 		}
 	}
 	return
@@ -30,6 +32,10 @@ func TestCollection_Put(t *testing.T) {
 		Indexes: []Index{
 			{
 				Field:   []string{"id"},
+				Mapper:  &sync.Map{},
+				Indexer: fmt.Sprint,
+			}, {
+				Field:   []string{"name"},
 				Mapper:  &sync.Map{},
 				Indexer: fmt.Sprint,
 			}, {
@@ -76,7 +82,7 @@ func TestCollection_Put(t *testing.T) {
 				item: X{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
 					Code: 1,
-					Name: 1,
+					Name: 2,
 				},
 			},
 			cas: 0,
@@ -87,7 +93,7 @@ func TestCollection_Put(t *testing.T) {
 				item: X{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
 					Code: 0,
-					Name: 0,
+					Name: 3,
 				},
 			},
 			cas: 1,
@@ -98,7 +104,7 @@ func TestCollection_Put(t *testing.T) {
 				item: X{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
 					Code: 1,
-					Name: 1,
+					Name: 4,
 				},
 			},
 			cas: 0,
@@ -109,10 +115,21 @@ func TestCollection_Put(t *testing.T) {
 				item: X{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
 					Code: 2,
-					Name: 2,
+					Name: 5,
 				},
 			},
 			cas: 2,
+			ok:  true,
+		},
+		{
+			args: args{
+				item: X{
+					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
+					Code: 5,
+					Name: 5,
+				},
+			},
+			cas: 3,
 			ok:  true,
 		},
 	}
@@ -128,6 +145,7 @@ func TestCollection_Put(t *testing.T) {
 		})
 	}
 	for _, index := range collection.Indexes {
+		t.Log(index.Field)
 		index.Range(func(key, value interface{}) bool {
 			t.Log(key, value)
 			return true
