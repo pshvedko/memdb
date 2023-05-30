@@ -50,30 +50,38 @@ type Rollback struct {
 }
 
 func (c *Collection) Put(item Item) (uint64, bool) {
-	add := &Row{}
-	add.Lock()
-	defer add.Unlock()
-	row, key, ok := c.Indexes[0].Put(c.Indexes[0].Key(item), add)
+	one := &Row{}
+	one.Lock()
+	defer one.Unlock()
+	row, key, ok := c.Indexes[0].Put(c.Indexes[0].Key(item), one)
 	if ok {
 		return c.update(row, item)
 	}
 	return c.insert(row, item, Rollback{index: c.Indexes[0], key: key})
 }
 
-func (c *Collection) update(row *Row, item Item, rollbacks ...Rollback) (uint64, bool) {
+func (c *Collection) update(row *Row, item Item) (uint64, bool) {
 	row.Lock()
 	defer row.Unlock()
+	var rollbacks, destroyed []Rollback
 	for _, index := range c.Indexes[1:] {
-		_, _, ok := index.Put(index.Key(item), row)
+		one, key, ok := index.Put(index.Key(item), row)
 		if ok {
+			if one != row {
+				return rollback(rollbacks...)
+			}
 			continue
 		}
 		rollbacks = append(rollbacks, Rollback{
+			key:   key,
+			index: index,
+		})
+		destroyed = append(destroyed, Rollback{
 			key:   index.Key(row),
 			index: index,
 		})
 	}
-	return commit(row, item, rollbacks...)
+	return commit(row, item, destroyed...)
 }
 
 func (c *Collection) insert(row *Row, item Item, rollbacks ...Rollback) (uint64, bool) {

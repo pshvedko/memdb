@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"sync"
+	"testing"
 )
 
 type X struct {
@@ -24,8 +25,8 @@ func (x X) Field(names ...string) (values []interface{}) {
 	return
 }
 
-func ExampleCollection_Put() {
-	c := Collection{
+func TestCollection_Put(t *testing.T) {
+	collection := Collection{
 		Indexes: []Index{
 			{
 				Field:   []string{"id"},
@@ -38,48 +39,88 @@ func ExampleCollection_Put() {
 			},
 		},
 	}
-
-	// NEW
-	x1 := X{
-		ID:   uuid.New(),
-		Name: 1,
-		Code: 100,
+	type args struct {
+		item Item
 	}
-	fmt.Println(c.Put(x1))
-
-	// ERROR CODE
-	x2 := X{
-		ID:   uuid.New(),
-		Name: 2,
-		Code: 100,
+	tests := []struct {
+		name string
+		args args
+		cas  uint64
+		ok   bool
+	}{
+		// TODO: Add test cases.
+		{
+			args: args{
+				item: X{
+					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae0000"),
+					Code: 0,
+					Name: 0,
+				},
+			},
+			cas: 1,
+			ok:  true,
+		},
+		{
+			args: args{
+				item: X{
+					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae0000"),
+					Code: 1,
+					Name: 1,
+				},
+			},
+			cas: 2,
+			ok:  true,
+		},
+		{
+			args: args{
+				item: X{
+					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae7777"),
+					Code: 1,
+					Name: 1,
+				},
+			},
+			cas: 0,
+			ok:  false,
+		},
+		{
+			args: args{
+				item: X{
+					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae7777"),
+					Code: 0,
+					Name: 0,
+				},
+			},
+			cas: 1,
+			ok:  true,
+		},
+		{
+			args: args{
+				item: X{
+					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae7777"),
+					Code: 1,
+					Name: 1,
+				},
+			},
+			cas: 0,
+			ok:  false,
+		},
 	}
-	fmt.Println(c.Put(x2))
-
-	// UPDATE NAME CODE
-	x3 := X{
-		ID:   x1.ID,
-		Name: 3,
-		Code: 200,
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cas, ok := collection.Put(tt.args.item)
+			if cas != tt.cas {
+				t.Errorf("Put() cas = %v, want %v", cas, tt.cas)
+			}
+			if ok != tt.ok {
+				t.Errorf("Put() ok = %v, want %v", ok, tt.ok)
+			}
+		})
 	}
-	fmt.Println(c.Put(x3))
 
-	// UPDATE NAME
-	x4 := X{
-		ID:   x1.ID,
-		Name: 4,
-		Code: 400,
+	for _, index := range collection.Indexes {
+		index.Range(func(key, value interface{}) bool {
+			t.Log(key, value)
+			return true
+		})
 	}
-	fmt.Println(c.Put(x4))
-
-	c.Indexes[0].Range(func(key, value interface{}) bool {
-		fmt.Println(key, value)
-		return true
-	})
-	c.Indexes[1].Range(func(key, value interface{}) bool {
-		fmt.Println(key, value)
-		return true
-	})
-
-	//Output:
-	//
 }
