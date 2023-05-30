@@ -127,7 +127,6 @@ func TestCollection_Put(t *testing.T) {
 			}
 		})
 	}
-
 	for _, index := range collection.Indexes {
 		index.Range(func(key, value interface{}) bool {
 			t.Log(key, value)
