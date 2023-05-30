@@ -72,14 +72,8 @@ func (c *Collection) update(row *Row, item Item) (uint64, bool) {
 			}
 			continue
 		}
-		rollbacks = append(rollbacks, Rollback{
-			key:   key,
-			index: index,
-		})
-		unleashes = append(unleashes, Rollback{
-			key:   index.Key(row),
-			index: index,
-		})
+		rollbacks = append(rollbacks, Rollback{index: index, key: key})
+		unleashes = append(unleashes, Rollback{index: index, key: index.Key(row)})
 	}
 	return commit(row, item, unleashes...)
 }
