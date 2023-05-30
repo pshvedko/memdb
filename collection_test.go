@@ -74,7 +74,7 @@ func TestCollection_Put(t *testing.T) {
 		{
 			args: args{
 				item: X{
-					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae7777"),
+					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
 					Code: 1,
 					Name: 1,
 				},
@@ -85,7 +85,7 @@ func TestCollection_Put(t *testing.T) {
 		{
 			args: args{
 				item: X{
-					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae7777"),
+					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
 					Code: 0,
 					Name: 0,
 				},
@@ -96,13 +96,24 @@ func TestCollection_Put(t *testing.T) {
 		{
 			args: args{
 				item: X{
-					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae7777"),
+					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
 					Code: 1,
 					Name: 1,
 				},
 			},
 			cas: 0,
 			ok:  false,
+		},
+		{
+			args: args{
+				item: X{
+					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
+					Code: 2,
+					Name: 2,
+				},
+			},
+			cas: 2,
+			ok:  true,
 		},
 	}
 	for _, tt := range tests {
