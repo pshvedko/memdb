@@ -63,7 +63,7 @@ func (c *Collection) Put(item Item) (uint64, bool) {
 func (c *Collection) update(row *Row, item Item) (uint64, bool) {
 	row.Lock()
 	defer row.Unlock()
-	var rollbacks, destroyed []Rollback
+	var rollbacks, unleashes []Rollback
 	for _, index := range c.Indexes[1:] {
 		one, key, ok := index.Put(index.Key(item), row)
 		if ok {
@@ -76,12 +76,12 @@ func (c *Collection) update(row *Row, item Item) (uint64, bool) {
 			key:   key,
 			index: index,
 		})
-		destroyed = append(destroyed, Rollback{
+		unleashes = append(unleashes, Rollback{
 			key:   index.Key(row),
 			index: index,
 		})
 	}
-	return commit(row, item, destroyed...)
+	return commit(row, item, unleashes...)
 }
 
 func (c *Collection) insert(row *Row, item Item, rollbacks ...Rollback) (uint64, bool) {
