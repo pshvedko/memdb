@@ -77,6 +77,73 @@ func BenchmarkCollection_Put(b *testing.B) {
 	}
 }
 
+func TestCollection_Put_update_with_collision(t *testing.T) {
+	collection := Collection{
+		Indexes: []Index{
+			{
+				Field:   []string{"id"},
+				Mapper:  &sync.Map{},
+				Indexer: fmt.Sprint,
+			}, {
+				Field:   []string{"type", "name"},
+				Mapper:  &sync.Map{},
+				Indexer: fmt.Sprint,
+			}, {
+				Field:   []string{"code"},
+				Mapper:  &sync.Map{},
+				Indexer: fmt.Sprint,
+			},
+		},
+	}
+	id1 := uuid.New()
+	id2 := uuid.New()
+	collection.Put(X{
+		ID:   id1,
+		Type: "update",
+		Code: 1,
+		Name: 1,
+	})
+	collection.Put(X{
+		ID:   id2,
+		Type: "update",
+		Code: 2,
+		Name: 2,
+	})
+	c1 := make(chan bool)
+	c2 := make(chan bool)
+	go func() {
+		ok := <-c2
+		time.AfterFunc(time.Second/10, func() {
+			c1 <- ok
+		})
+		collection.Put(X{
+			ID:   uuid.UUID{},
+			Type: "update",
+			Code: 1,
+			Name: 2,
+		})
+		c2 <- ok
+	}()
+	collection.Put(X{
+		ID:   id1,
+		Type: "update",
+		Code: 2,
+		Name: 1,
+		F: func() bool {
+			c2 <- false
+			return <-c1
+		},
+	})
+	<-c2
+	for _, index := range collection.Indexes {
+		t.Log(index.Field)
+		index.Range(func(key, value interface{}) bool {
+			t.Log(key, value)
+			return true
+		})
+	}
+}
+
 func TestCollection_Put_insert_with_collision(t *testing.T) {
 	collection := Collection{
 		Indexes: []Index{
@@ -95,31 +162,29 @@ func TestCollection_Put_insert_with_collision(t *testing.T) {
 			},
 		},
 	}
-
 	c1 := make(chan bool)
-	c2 := make(chan bool)
-	go func() {
-		ok := <-c2
-		time.AfterFunc(time.Second, func() {
-			c1 <- ok
-		})
-		collection.Put(X{
-			ID:   uuid.UUID{},
-			Type: "xxx",
-			Code: 0,
-			Name: 1,
-		})
-	}()
 	collection.Put(X{
-		ID:   uuid.UUID{},
-		Type: "xxx",
+		ID:   uuid.New(),
+		Type: "insert",
 		Code: 0,
-		Name: 0,
+		Name: 1,
 		F: func() bool {
-			c2 <- false
+			go func() {
+				c1 <- <-c1
+				collection.Put(X{
+					ID:   uuid.New(),
+					Type: "insert",
+					Code: 0,
+					Name: 2,
+				})
+				c1 <- true
+			}()
+			c1 <- false
+			time.Sleep(time.Second / 10)
 			return <-c1
 		},
 	})
+	<-c1
 	for _, index := range collection.Indexes {
 		t.Log(index.Field)
 		index.Range(func(key, value interface{}) bool {
