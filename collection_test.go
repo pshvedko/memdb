@@ -5,13 +5,30 @@ import (
 	"github.com/google/uuid"
 	"sync"
 	"testing"
+	"time"
 )
+
+type F func() bool
 
 type X struct {
 	ID   uuid.UUID `json:"id"`
 	Type string    `json:"type"`
 	Code int       `json:"code"`
 	Name int       `json:"name"`
+	F
+}
+
+func (x X) Copy(item Item) (Item, bool) {
+	switch item.(type) {
+	case nil:
+	case X:
+	default:
+		panic(item)
+	}
+	if x.F != nil && !x.F() {
+		return nil, false
+	}
+	return x, true
 }
 
 func (x X) Field(name string) interface{} {
@@ -60,6 +77,58 @@ func BenchmarkCollection_Put(b *testing.B) {
 	}
 }
 
+func TestCollection_Put_insert_with_collision(t *testing.T) {
+	collection := Collection{
+		Indexes: []Index{
+			{
+				Field:   []string{"id"},
+				Mapper:  &sync.Map{},
+				Indexer: fmt.Sprint,
+			}, {
+				Field:   []string{"type", "name"},
+				Mapper:  &sync.Map{},
+				Indexer: fmt.Sprint,
+			}, {
+				Field:   []string{"code"},
+				Mapper:  &sync.Map{},
+				Indexer: fmt.Sprint,
+			},
+		},
+	}
+
+	c1 := make(chan bool)
+	c2 := make(chan bool)
+	go func() {
+		ok := <-c2
+		time.AfterFunc(time.Second, func() {
+			c1 <- ok
+		})
+		collection.Put(X{
+			ID:   uuid.UUID{},
+			Type: "xxx",
+			Code: 0,
+			Name: 1,
+		})
+	}()
+	collection.Put(X{
+		ID:   uuid.UUID{},
+		Type: "xxx",
+		Code: 0,
+		Name: 0,
+		F: func() bool {
+			c2 <- false
+			return <-c1
+		},
+	})
+	for _, index := range collection.Indexes {
+		t.Log(index.Field)
+		index.Range(func(key, value interface{}) bool {
+			t.Log(key, value)
+			return true
+		})
+	}
+}
+
 func TestCollection_Put(t *testing.T) {
 	collection := Collection{
 		Indexes: []Index{
@@ -90,7 +159,7 @@ func TestCollection_Put(t *testing.T) {
 		// TODO: Add test cases.
 		{
 			args: args{
-				item: X{
+				item: &X{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae0000"),
 					Type: "audio",
 					Code: 0,

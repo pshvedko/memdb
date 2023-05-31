@@ -42,6 +42,7 @@ type Collection struct {
 
 type Item interface {
 	Field(string) interface{}
+	Copy(Item) (Item, bool)
 }
 
 type Row struct {
@@ -95,7 +96,7 @@ func (c Collection) update(row *Row, item Item) (uint64, bool) {
 		rollbacks = append(rollbacks, Rollback{index: index, key: key})
 		unleashes = append(unleashes, Rollback{index: index, key: index.Key(row)})
 	}
-	return c.commit(row, item, unleashes...)
+	return c.end(rollbacks, row, item, unleashes...)
 }
 
 func (c Collection) insert(row *Row, item Item, rollbacks ...Rollback) (uint64, bool) {
@@ -110,7 +111,7 @@ func (c Collection) insert(row *Row, item Item, rollbacks ...Rollback) (uint64, 
 		}
 		rollbacks = append(rollbacks, Rollback{key: key, index: index})
 	}
-	return c.commit(row, item)
+	return c.end(rollbacks, row, item)
 }
 
 func (c Collection) rollback(rollbacks ...Rollback) (uint64, bool) {
@@ -122,7 +123,19 @@ func (c Collection) rollback(rollbacks ...Rollback) (uint64, bool) {
 
 func (c Collection) commit(row *Row, item Item, rollbacks ...Rollback) (uint64, bool) {
 	c.rollback(rollbacks...)
+	item, ok := item.Copy(row.Item)
+	if !ok {
+		return 0, false
+	}
 	row.Item = item
 	row.cas++
 	return row.cas, true
+}
+
+func (c Collection) end(rollbacks []Rollback, row *Row, item Item, unleashes ...Rollback) (uint64, bool) {
+	cas, ok := c.commit(row, item, unleashes...)
+	if !ok {
+		return c.rollback(rollbacks...)
+	}
+	return cas, ok
 }
