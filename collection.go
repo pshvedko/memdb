@@ -62,7 +62,7 @@ type Rollback struct {
 	index Index
 }
 
-func (c Collection) Put(item Item) (uint64, bool) {
+func (c Collection) Put(item Item, cas uint64) (uint64, bool) {
 	one := &Row{}
 	one.Lock()
 	defer one.Unlock()
@@ -70,14 +70,14 @@ index:
 	row, key, ok := c.Indexes[0].Put(c.Indexes[0].Key(item), one)
 	if ok {
 		if row.committed() {
-			return c.update(row, item)
+			return c.update(row, item, cas)
 		}
 		goto index
 	}
-	return c.insert(row, item, Rollback{index: c.Indexes[0], key: key})
+	return c.insert(row, item, cas, Rollback{index: c.Indexes[0], key: key})
 }
 
-func (c Collection) update(row *Row, item Item) (uint64, bool) {
+func (c Collection) update(row *Row, item Item, cas uint64) (uint64, bool) {
 	row.Lock()
 	defer row.Unlock()
 	var rollbacks, unleashes []Rollback
@@ -96,10 +96,10 @@ func (c Collection) update(row *Row, item Item) (uint64, bool) {
 		rollbacks = append(rollbacks, Rollback{index: index, key: key})
 		unleashes = append(unleashes, Rollback{index: index, key: index.Key(row)})
 	}
-	return c.end(rollbacks, row, item, unleashes...)
+	return c.end(rollbacks, row, item, cas, unleashes...)
 }
 
-func (c Collection) insert(row *Row, item Item, rollbacks ...Rollback) (uint64, bool) {
+func (c Collection) insert(row *Row, item Item, cas uint64, rollbacks ...Rollback) (uint64, bool) {
 	for _, index := range c.Indexes[1:] {
 	index:
 		one, key, ok := index.Put(index.Key(item), row)
@@ -111,7 +111,7 @@ func (c Collection) insert(row *Row, item Item, rollbacks ...Rollback) (uint64, 
 		}
 		rollbacks = append(rollbacks, Rollback{key: key, index: index})
 	}
-	return c.end(rollbacks, row, item)
+	return c.end(rollbacks, row, item, cas)
 }
 
 func (c Collection) rollback(rollbacks ...Rollback) (uint64, bool) {
@@ -121,19 +121,25 @@ func (c Collection) rollback(rollbacks ...Rollback) (uint64, bool) {
 	return 0, false
 }
 
-func (c Collection) commit(row *Row, item Item, rollbacks ...Rollback) (uint64, bool) {
+func (c Collection) commit(row *Row, item Item, cas uint64, rollbacks ...Rollback) (uint64, bool) {
+	switch {
+	case cas == 0:
+		cas = row.cas + 1
+	case cas <= row.cas:
+		return 0, false
+	}
 	c.rollback(rollbacks...)
 	item, ok := item.Copy(row.Item)
 	if !ok {
 		return 0, false
 	}
 	row.Item = item
-	row.cas++
-	return row.cas, true
+	row.cas = cas
+	return cas, true
 }
 
-func (c Collection) end(rollbacks []Rollback, row *Row, item Item, unleashes ...Rollback) (uint64, bool) {
-	cas, ok := c.commit(row, item, unleashes...)
+func (c Collection) end(rollbacks []Rollback, row *Row, item Item, cas uint64, unleashes ...Rollback) (uint64, bool) {
+	cas, ok := c.commit(row, item, cas, unleashes...)
 	if !ok {
 		return c.rollback(rollbacks...)
 	}

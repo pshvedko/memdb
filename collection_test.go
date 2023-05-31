@@ -70,7 +70,7 @@ func BenchmarkCollection_Put(b *testing.B) {
 			Type: "audio",
 			Code: i,
 			Name: i,
-		})
+		}, 0)
 		if !ok || cas == 0 {
 			b.FailNow()
 		}
@@ -102,13 +102,13 @@ func TestCollection_Put_update_with_collision(t *testing.T) {
 		Type: "update",
 		Code: 1,
 		Name: 1,
-	})
+	}, 0)
 	collection.Put(X{
 		ID:   id2,
 		Type: "update",
 		Code: 2,
 		Name: 2,
-	})
+	}, 0)
 	c1 := make(chan bool)
 	c2 := make(chan bool)
 	go func() {
@@ -121,7 +121,7 @@ func TestCollection_Put_update_with_collision(t *testing.T) {
 			Type: "update",
 			Code: 1,
 			Name: 2,
-		})
+		}, 0)
 		c2 <- ok
 	}()
 	collection.Put(X{
@@ -133,7 +133,7 @@ func TestCollection_Put_update_with_collision(t *testing.T) {
 			c2 <- false
 			return <-c1
 		},
-	})
+	}, 0)
 	<-c2
 	for _, index := range collection.Indexes {
 		t.Log(index.Field)
@@ -176,14 +176,14 @@ func TestCollection_Put_insert_with_collision(t *testing.T) {
 					Type: "insert",
 					Code: 0,
 					Name: 2,
-				})
+				}, 0)
 				c1 <- true
 			}()
 			c1 <- false
 			time.Sleep(time.Second / 10)
 			return <-c1
 		},
-	})
+	}, 0)
 	<-c1
 	for _, index := range collection.Indexes {
 		t.Log(index.Field)
@@ -214,6 +214,7 @@ func TestCollection_Put(t *testing.T) {
 	}
 	type args struct {
 		item Item
+		cas  uint64
 	}
 	tests := []struct {
 		name string
@@ -302,14 +303,28 @@ func TestCollection_Put(t *testing.T) {
 					Code: 5,
 					Name: 5,
 				},
+				cas: 5,
 			},
-			cas: 3,
+			cas: 5,
 			ok:  true,
+		},
+		{
+			args: args{
+				item: X{
+					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
+					Type: "audio",
+					Code: 6,
+					Name: 6,
+				},
+				cas: 5,
+			},
+			cas: 0,
+			ok:  false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cas, ok := collection.Put(tt.args.item)
+			cas, ok := collection.Put(tt.args.item, tt.args.cas)
 			if cas != tt.cas {
 				t.Errorf("Put() cas = %v, want %v", cas, tt.cas)
 			}
