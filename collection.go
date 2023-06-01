@@ -128,19 +128,19 @@ type Rollback struct {
 	index Index
 }
 
-func (c Collection) Put(tx Tx, item Item, cas uint64) (uint64, bool) {
+func (c Collection) Put(tx *Tx, item Item, cas uint64) (uint64, bool) {
 	one := &Row{}
-	one.lock(&tx)
-	defer one.unlock(&tx)
+	one.lock(tx)
+	defer one.unlock(tx)
 index:
 	row, key, ok := c.Indexes[0].Put(c.Indexes[0].Key(item), one)
 	if ok {
-		if row.committed(&tx) {
-			return c.update(&tx, row, item, cas)
+		if row.committed(tx) {
+			return c.update(tx, row, item, cas)
 		}
 		goto index
 	}
-	return c.insert(&tx, row, item, cas, Rollback{index: c.Indexes[0], key: key})
+	return c.insert(tx, row, item, cas, Rollback{index: c.Indexes[0], key: key})
 }
 
 func (c Collection) update(tx *Tx, row *Row, item Item, cas uint64) (uint64, bool) {

@@ -71,8 +71,9 @@ func newCollection(h testing.TB) Collection {
 
 func BenchmarkCollection_Put(b *testing.B) {
 	collection := newCollection(b)
+	var tx Tx
 	for i := 0; i < b.N; i++ {
-		cas, ok := collection.Put(Tx{}, X1{
+		cas, ok := collection.Put(&tx, X1{
 			ID:   uuid.UUID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(i >> 24), byte(i >> 16), byte(i >> 8), byte(i)},
 			Type: "audio",
 			Code: i,
@@ -124,13 +125,13 @@ func TestCollection_Put_update_with_collision(t *testing.T) {
 	collection := newCollection(t)
 	id1 := uuid.New()
 	id2 := uuid.New()
-	collection.Put(Tx{}, X1{
+	collection.Put(&Tx{}, X1{
 		ID:   id1,
 		Type: "update",
 		Code: 1,
 		Name: 1,
 	}, 0)
-	collection.Put(Tx{}, X1{
+	collection.Put(&Tx{}, X1{
 		ID:   id2,
 		Type: "update",
 		Code: 2,
@@ -140,7 +141,7 @@ func TestCollection_Put_update_with_collision(t *testing.T) {
 	c2 := make(chan bool, 2)
 	c3 := make(chan bool, 2)
 	go func() {
-		collection.Put(Tx{}, X1{
+		collection.Put(&Tx{}, X1{
 			ID:   id1,
 			Type: "update",
 			Code: 2, // <-- collision id2
@@ -153,7 +154,7 @@ func TestCollection_Put_update_with_collision(t *testing.T) {
 		c3 <- true
 	}()
 	go func() {
-		collection.Put(Tx{}, X1{
+		collection.Put(&Tx{}, X1{
 			ID:   id2,
 			Type: "update",
 			Code: 1,
@@ -185,7 +186,7 @@ func TestCollection_Put_insert_with_collision(t *testing.T) {
 	id1 := uuid.New()
 	id2 := uuid.New()
 	go func() {
-		collection.Put(Tx{}, X1{
+		collection.Put(&Tx{}, X1{
 			ID:   id2,
 			Type: "insert",
 			Code: 0, // <-- collision id1
@@ -198,7 +199,7 @@ func TestCollection_Put_insert_with_collision(t *testing.T) {
 		c3 <- true
 	}()
 	go func() {
-		collection.Put(Tx{}, X1{
+		collection.Put(&Tx{}, X1{
 			ID:   id1,
 			Type: "insert",
 			Code: 0,
@@ -355,7 +356,7 @@ func TestCollection_Put(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cas, ok := collection.Put(Tx{}, tt.args.item, tt.args.cas)
+			cas, ok := collection.Put(&Tx{}, tt.args.item, tt.args.cas)
 			if cas != tt.cas {
 				t.Errorf("Put() cas = %v, want %v", cas, tt.cas)
 			}
