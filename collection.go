@@ -106,6 +106,8 @@ type Rollback struct {
 	index Index
 }
 
+// Put
+//
 // insert row1= code:1 name:1
 // insert row2= code:2 name:2
 //
@@ -140,7 +142,7 @@ type Rollback struct {
 //         put index code:2 -> return row2       |         put index code:1 -> return row1
 //         row2.committed ???                DEAD*LOCK         row1.committed() ???
 //                                               |
-
+//
 func (c Collection) Put(item Item, cas uint64) (uint64, bool) {
 	one := &Row{}
 	one.Lock()
