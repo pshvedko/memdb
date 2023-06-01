@@ -62,23 +62,23 @@ type Row struct {
 var x int32
 
 func (r *Row) Lock() {
-	println("Lock ", r, atomic.AddInt32(&x, 1))
+	println(fmt.Sprintf("%*sLock %p", atomic.AddInt32(&x, 1)-1, "", r))
 	r.RWMutex.Lock()
 
 }
 
 func (r *Row) Unlock() {
-	println("Unlock", r, atomic.AddInt32(&x, -1))
+	println(fmt.Sprintf("%*sUnlock %p", atomic.AddInt32(&x, -1), "", r))
 	r.RWMutex.Unlock()
 }
 
 func (r *Row) RLock() {
-	println("RLock ", r, atomic.AddInt32(&x, 1))
+	println(fmt.Sprintf("%*sRLock %p", atomic.AddInt32(&x, 1)-1, "", r))
 	r.RWMutex.RLock()
 }
 
 func (r *Row) RUnlock() {
-	println("RUnlock", r, atomic.AddInt32(&x, -1))
+	println(fmt.Sprintf("%*sRUnlock %p", atomic.AddInt32(&x, -1), "", r))
 	r.RWMutex.RUnlock()
 }
 
