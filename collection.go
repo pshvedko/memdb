@@ -28,7 +28,6 @@ type Index struct {
 	Indexer
 	Mapper
 	Field []string
-	Locker
 }
 
 func (i Index) Put(key string, row *Row) (*Row, string, bool) {
@@ -92,7 +91,6 @@ type Rollback struct {
 	index Index
 }
 
-// Put ...
 func (c Collection) Put(item Item, cas uint64) (uint64, bool) {
 	one := &Row{}
 	one.Lock()
@@ -159,11 +157,11 @@ func (c Collection) commit(row *Row, item Item, cas uint64, rollbacks ...Rollbac
 	case cas <= row.cas:
 		return 0, false
 	}
-	c.rollback(rollbacks...)
 	item, ok := item.Copy(row.Item)
 	if !ok {
 		return 0, false
 	}
+	c.rollback(rollbacks...)
 	row.Item = item
 	row.cas = cas
 	return cas, true

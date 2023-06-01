@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"oya.to/namedlocker"
 )
 
 type X1 struct {
@@ -57,17 +56,14 @@ func newCollection(h testing.TB) Collection {
 				Field:   []string{"id"},
 				Mapper:  &sync.Map{},
 				Indexer: fmt.Sprint,
-				Locker:  &namedlocker.Store{},
 			}, {
 				Field:   []string{"type", "name"},
 				Mapper:  &sync.Map{},
 				Indexer: fmt.Sprint,
-				Locker:  &namedlocker.Store{},
 			}, {
 				Field:   []string{"code"},
 				Mapper:  &sync.Map{},
 				Indexer: fmt.Sprint,
-				Locker:  &namedlocker.Store{},
 			},
 		},
 	}
@@ -151,7 +147,7 @@ func TestCollection_Put_update_with_collision(t *testing.T) {
 			Code: 2, // <-- collision id2
 			Name: 1,
 			F: func() bool {
-				c2 <- <-c1
+				<-c1
 				return true
 			},
 		}, 0)
@@ -169,6 +165,13 @@ func TestCollection_Put_update_with_collision(t *testing.T) {
 		}, 0)
 	}()
 	c2 <- true
+	c2 <- true
+	c2 <- true
+	c2 <- true
+	c2 <- true
+	c2 <- true
+	c2 <- true
+	c2 <- true
 	<-c3
 	<-c3
 	for _, index := range collection.Indexes {
@@ -182,9 +185,9 @@ func TestCollection_Put_update_with_collision(t *testing.T) {
 
 func TestCollection_Put_insert_with_collision(t *testing.T) {
 	collection := newCollection(t)
-	c3 := make(chan bool, 2)
-	c2 := make(chan bool, 2)
-	c1 := make(chan bool, 2)
+	c3 := make(chan bool, 1)
+	c2 := make(chan bool, 1)
+	c1 := make(chan bool, 1)
 	id1 := uuid.New()
 	id2 := uuid.New()
 	go func() {
@@ -194,7 +197,7 @@ func TestCollection_Put_insert_with_collision(t *testing.T) {
 			Code: 0, // <-- collision id1
 			Name: 2,
 			F: func() bool {
-				c1 <- <-c2
+				<-c2
 				return true
 			},
 		}, 0)
@@ -211,11 +214,15 @@ func TestCollection_Put_insert_with_collision(t *testing.T) {
 				return false
 			},
 		}, 0)
-		c2 <- true
 		c3 <- true
 	}()
 	c1 <- true
+	c1 <- true
+	c1 <- true
+	c1 <- true
+	c1 <- true
 	<-c3
+	c2 <- true
 	<-c3
 	for _, index := range collection.Indexes {
 		t.Log(index.Field)
@@ -333,6 +340,20 @@ func TestCollection_Put(t *testing.T) {
 					Name: 6,
 				},
 				cas: 5,
+			},
+			cas: 0,
+			ok:  false,
+		},
+		{
+			args: args{
+				item: X1{
+					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
+					Type: "audio",
+					Code: 6,
+					Name: 6,
+					F:    func() bool { return false },
+				},
+				cas: 6,
 			},
 			cas: 0,
 			ok:  false,

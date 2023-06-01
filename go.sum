@@ -1,4 +1,2 @@
 github.com/google/uuid v1.3.0 h1:t6JiXgmwXMjEs8VusXIJk2BXHsn+wx8BZdTaoZ5fu7I=
 github.com/google/uuid v1.3.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
-oya.to/namedlocker v1.0.0 h1:+HKiEvhKSzBtboeqiT8vK10aVUTASnneKpw+j79FQwA=
-oya.to/namedlocker v1.0.0/go.mod h1:+eBYtjcKHBxsdm/HAofHTTnSq6H96THcxHYG1A6WKX0=
