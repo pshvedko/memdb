@@ -108,22 +108,22 @@ type Rollback struct {
 
 // Put
 //
-// insert row1= code:1 name:1
-// insert row2= code:2 name:2
+//   insert row1= code:1 name:1
+//   insert row2= code:2 name:2
 //
-// update row1= code:2 name:1                    |
+//   update row1= code:2 name:1                  |
 //   row1.committed ? true                       *
 //     c.update(row1)                            |
 //       row1.Lock() <---------------------------+
 //         put index code:2 -> return row2       |
-//         row2.committed ? true                 *
+//         row2.committed ? true                -*
 //                                               |
-//                                               | update row2= code:1 name:2
-//                                               *   row2.committed ? true
+//                                               |   update row2= code:1 name:2
+//                                               *-  row2.committed ? true
 //                                               |     c.update(row2)
 //           SLEEP!!!                            +-----> row2.Lock()
 //                                               |         put index code:1 -> return row1
-//                                               *         row1.committed ? +
+//                                               *-        row1.committed ? +
 //                                               |                          |
 //                                               |                          |
 //                                               |                          |
@@ -133,10 +133,9 @@ type Rollback struct {
 //                                               |           rollback
 //                                               +-----X row2.Unlock()
 //                                               |
-// ==============================================|==============================================
 //                                               |
-// update row1= code:2 name:1                    | update row2= code:1 name:2
-//   row1.committed ? true                       *   row2.committed ? true
+//   update row1= code:2 name:1                  |   update row2= code:1 name:2
+//   row1.committed ? true                      -*-  row2.committed ? true
 //     c.update(row1)                            |     c.update(row2)
 //       row1.Lock() <---------------------------+-----> row2.Lock()
 //         put index code:2 -> return row2       |         put index code:1 -> return row1
