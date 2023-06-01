@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"sync"
-	"sync/atomic"
 )
 
 type Mapper interface {
@@ -52,38 +51,76 @@ type Item interface {
 	Copy(Item) (Item, bool)
 }
 
+type Tx struct {
+	tx *Tx
+}
+
+type Txx *Tx
+
 type Row struct {
 	Item
 	cas uint64
-	sync.RWMutex
+	rw  sync.RWMutex
+	mx  sync.Mutex
+	tx  *Tx
 }
 
-var x int32
-
-func (r *Row) Lock() {
-	println(fmt.Sprintf("%*sLock %p", atomic.AddInt32(&x, 1)-1, "", r))
-	r.RWMutex.Lock()
+func (r *Row) acquire(t *Tx) bool {
+	r.mx.Lock()
+	defer r.mx.Unlock()
+	for x := r.tx; x != nil; x = x.tx {
+		if t == x {
+			return false
+		}
+	}
+	t.tx = r.tx
+	r.tx = t
+	return true
 }
 
-func (r *Row) Unlock() {
-	println(fmt.Sprintf("%*sUnlock %p", atomic.AddInt32(&x, -1), "", r))
-	r.RWMutex.Unlock()
+func (r *Row) release(t *Tx) {
+	r.mx.Lock()
+	defer r.mx.Unlock()
+	for x := &r.tx; *x != nil; x = &(*x).tx {
+		if t == *x {
+			*x = t.tx
+			return
+		}
+	}
+	panic(t)
 }
 
-func (r *Row) RLock() {
-	println(fmt.Sprintf("%*sRLock %p", atomic.AddInt32(&x, 1)-1, "", r))
-	r.RWMutex.RLock()
+func (r *Row) lock(t *Tx) {
+	if !r.acquire(t) {
+		panic(t)
+	}
+	r.rw.Lock()
 }
 
-func (r *Row) RUnlock() {
-	println(fmt.Sprintf("%*sRUnlock %p", atomic.AddInt32(&x, -1), "", r))
-	r.RWMutex.RUnlock()
+func (r *Row) unlock(t *Tx) {
+	r.release(t)
+	r.rw.Unlock()
 }
 
-func (r *Row) committed() bool {
-	r.RLock()
-	defer r.RUnlock()
-	return r.cas > 0
+func (r *Row) read(t *Tx) bool {
+	ok := r.acquire(t)
+	if ok {
+		r.rw.RLock()
+	}
+	return ok
+}
+
+func (r *Row) unread(t *Tx) {
+	r.release(t)
+	r.rw.RUnlock()
+}
+
+func (r *Row) committed(tx *Tx) bool {
+	if r.read(tx) {
+		defer r.unread(tx)
+		return r.cas > 0
+	}
+	return true
 }
 
 type Rollback struct {
@@ -91,31 +128,31 @@ type Rollback struct {
 	index Index
 }
 
-func (c Collection) Put(item Item, cas uint64) (uint64, bool) {
+func (c Collection) Put(tx Tx, item Item, cas uint64) (uint64, bool) {
 	one := &Row{}
-	one.Lock()
-	defer one.Unlock()
+	one.lock(&tx)
+	defer one.unlock(&tx)
 index:
 	row, key, ok := c.Indexes[0].Put(c.Indexes[0].Key(item), one)
 	if ok {
-		if row.committed() {
-			return c.update(row, item, cas)
+		if row.committed(&tx) {
+			return c.update(&tx, row, item, cas)
 		}
 		goto index
 	}
-	return c.insert(row, item, cas, Rollback{index: c.Indexes[0], key: key})
+	return c.insert(&tx, row, item, cas, Rollback{index: c.Indexes[0], key: key})
 }
 
-func (c Collection) update(row *Row, item Item, cas uint64) (uint64, bool) {
-	row.Lock()
-	defer row.Unlock()
+func (c Collection) update(tx *Tx, row *Row, item Item, cas uint64) (uint64, bool) {
+	row.lock(tx)
+	defer row.unlock(tx)
 	var rollbacks, unleashes []Rollback
 	for _, index := range c.Indexes[1:] {
 	index:
 		one, key, ok := index.Put(index.Key(item), row)
 		if ok {
 			if one != row {
-				if one.committed() {
+				if one.committed(tx) {
 					return c.rollback(rollbacks...)
 				}
 				goto index
@@ -128,12 +165,12 @@ func (c Collection) update(row *Row, item Item, cas uint64) (uint64, bool) {
 	return c.end(rollbacks, row, item, cas, unleashes...)
 }
 
-func (c Collection) insert(row *Row, item Item, cas uint64, rollbacks ...Rollback) (uint64, bool) {
+func (c Collection) insert(tx *Tx, row *Row, item Item, cas uint64, rollbacks ...Rollback) (uint64, bool) {
 	for _, index := range c.Indexes[1:] {
 	index:
 		one, key, ok := index.Put(index.Key(item), row)
 		if ok {
-			if one.committed() {
+			if one.committed(tx) {
 				return c.rollback(rollbacks...)
 			}
 			goto index

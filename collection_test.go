@@ -72,7 +72,7 @@ func newCollection(h testing.TB) Collection {
 func BenchmarkCollection_Put(b *testing.B) {
 	collection := newCollection(b)
 	for i := 0; i < b.N; i++ {
-		cas, ok := collection.Put(X1{
+		cas, ok := collection.Put(Tx{}, X1{
 			ID:   uuid.UUID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(i >> 24), byte(i >> 16), byte(i >> 8), byte(i)},
 			Type: "audio",
 			Code: i,
@@ -84,7 +84,7 @@ func BenchmarkCollection_Put(b *testing.B) {
 	}
 }
 
-// TestCollection_Put_update_with_collision
+// DEADLOCK
 //
 //  insert row1= code:1 name:1
 //  insert row2= code:2 name:2
@@ -92,14 +92,14 @@ func BenchmarkCollection_Put(b *testing.B) {
 //  update row1= code:2 name:1                  |
 //  row1.committed ? true                       *
 //    c.update(row1)                            |
-//      row1.Lock() <---------------------------X
+//      row1.lock() <---------------------------X
 //        put index code:2 -> return row2       |
 //        row2.committed ? true                -*
 //                                              |
 //                                              |  update row2= code:1 name:2
 //                                              *- row2.committed ? true
 //                                              |    c.update(row2)
-//          SLEEP!!!                            X----> row2.Lock()
+//          SLEEP!!!                            X----> row2.lock()
 //                                              |        put index code:1 -> return row1
 //                                              *-       row1.committed ? +
 //                                              |                         |
@@ -107,15 +107,15 @@ func BenchmarkCollection_Put(b *testing.B) {
 //                                              |                         |
 //                                              |                         |
 //          rollback                            |                         |
-//      row1.Unlock() X------------------------->                         + true
+//      row1.unlock() X------------------------->                         + true
 //                                              |          rollback
-//                                              <----X row2.Unlock()
+//                                              <----X row2.unlock()
 //                                              |
 //                                              |
 //  update row1= code:2 name:1                  |  update row2= code:1 name:2
 //  row1.committed ? true                      -*- row2.committed ? true
 //    c.update(row1)                            |    c.update(row2)
-//      row1.Lock() <---------------------------X----> row2.Lock()
+//      row1.lock() <---------------------------X----> row2.lock()
 //        put index code:2 -> return row2       |        put index code:1 -> return row1
 //        row2.committed ???                DEAD*LOCK    row1.committed ???
 //                                              |
@@ -124,36 +124,36 @@ func TestCollection_Put_update_with_collision(t *testing.T) {
 	collection := newCollection(t)
 	id1 := uuid.New()
 	id2 := uuid.New()
-	collection.Put(X1{
+	collection.Put(Tx{}, X1{
 		ID:   id1,
 		Type: "update",
 		Code: 1,
 		Name: 1,
 	}, 0)
-	collection.Put(X1{
+	collection.Put(Tx{}, X1{
 		ID:   id2,
 		Type: "update",
 		Code: 2,
 		Name: 2,
 	}, 0)
-	t.Log("update")
 	c1 := make(chan bool, 2)
 	c2 := make(chan bool, 2)
 	c3 := make(chan bool, 2)
 	go func() {
-		collection.Put(X1{
+		collection.Put(Tx{}, X1{
 			ID:   id1,
 			Type: "update",
 			Code: 2, // <-- collision id2
 			Name: 1,
 			F: func() bool {
-				<-c1
+				c2 <- <-c1
 				return true
 			},
 		}, 0)
+		c3 <- true
 	}()
 	go func() {
-		collection.Put(X1{
+		collection.Put(Tx{}, X1{
 			ID:   id2,
 			Type: "update",
 			Code: 1,
@@ -163,14 +163,8 @@ func TestCollection_Put_update_with_collision(t *testing.T) {
 				return true
 			},
 		}, 0)
+		c3 <- true
 	}()
-	c2 <- true
-	c2 <- true
-	c2 <- true
-	c2 <- true
-	c2 <- true
-	c2 <- true
-	c2 <- true
 	c2 <- true
 	<-c3
 	<-c3
@@ -191,7 +185,7 @@ func TestCollection_Put_insert_with_collision(t *testing.T) {
 	id1 := uuid.New()
 	id2 := uuid.New()
 	go func() {
-		collection.Put(X1{
+		collection.Put(Tx{}, X1{
 			ID:   id2,
 			Type: "insert",
 			Code: 0, // <-- collision id1
@@ -204,7 +198,7 @@ func TestCollection_Put_insert_with_collision(t *testing.T) {
 		c3 <- true
 	}()
 	go func() {
-		collection.Put(X1{
+		collection.Put(Tx{}, X1{
 			ID:   id1,
 			Type: "insert",
 			Code: 0,
@@ -361,7 +355,7 @@ func TestCollection_Put(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cas, ok := collection.Put(tt.args.item, tt.args.cas)
+			cas, ok := collection.Put(Tx{}, tt.args.item, tt.args.cas)
 			if cas != tt.cas {
 				t.Errorf("Put() cas = %v, want %v", cas, tt.cas)
 			}
