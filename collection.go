@@ -64,7 +64,6 @@ var x int32
 func (r *Row) Lock() {
 	println(fmt.Sprintf("%*sLock %p", atomic.AddInt32(&x, 1)-1, "", r))
 	r.RWMutex.Lock()
-
 }
 
 func (r *Row) Unlock() {
