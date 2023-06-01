@@ -6,33 +6,38 @@ import (
 	"oya.to/namedlocker"
 	"sync"
 	"testing"
-	"time"
 )
 
-type F func() bool
+type W interface {
+	Wait()
+}
 
-type X struct {
+type X1 struct {
 	ID   uuid.UUID `json:"id"`
 	Type string    `json:"type"`
 	Code int       `json:"code"`
 	Name int       `json:"name"`
-	F
+
+	F func() bool
 }
 
-func (x X) Copy(item Item) (Item, bool) {
-	switch item.(type) {
-	case nil:
-	case X:
-	default:
-		panic(item)
-	}
+func (x X1) Copy(item Item) (Item, bool) {
 	if x.F != nil && !x.F() {
 		return nil, false
+	}
+	switch item.(type) {
+	case nil:
+	case X1:
+	default:
+		panic(item)
 	}
 	return x, true
 }
 
-func (x X) Field(name string) interface{} {
+func (x X1) Field(name string) interface{} {
+	if x.F != nil {
+		x.F()
+	}
 	switch name {
 	case "id":
 		return x.ID
@@ -74,7 +79,7 @@ func newCollection(h testing.TB) Collection {
 func BenchmarkCollection_Put(b *testing.B) {
 	collection := newCollection(b)
 	for i := 0; i < b.N; i++ {
-		cas, ok := collection.Put(X{
+		cas, ok := collection.Put(X1{
 			ID:   uuid.UUID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(i >> 24), byte(i >> 16), byte(i >> 8), byte(i)},
 			Type: "audio",
 			Code: i,
@@ -87,45 +92,41 @@ func BenchmarkCollection_Put(b *testing.B) {
 }
 
 func TestCollection_Put_update_with_collision(t *testing.T) {
-	t.Skip("deadlock")
+	//	t.Skip("deadlock")
 	collection := newCollection(t)
 	id1 := uuid.New()
 	id2 := uuid.New()
-	collection.Put(X{
+	collection.Put(X1{
 		ID:   id1,
 		Type: "update",
 		Code: 1,
 		Name: 1,
 	}, 0)
-	collection.Put(X{
+	collection.Put(X1{
 		ID:   id2,
 		Type: "update",
 		Code: 2,
 		Name: 2,
 	}, 0)
-	c1 := make(chan bool, 1)
-	collection.Put(X{
+	collection.Put(X1{
 		ID:   id1,
 		Type: "update",
-		Code: 2, // <-- collision
+		Code: 2, // <-- collision id2
 		Name: 1,
-		F: func() bool {
-			go func() {
-				c1 <- <-c1 // 2 false
-				collection.Put(X{
-					ID:   id2,
-					Type: "update",
-					Code: 1,
-					Name: 2, // <-- collision
-				}, 0)
-				c1 <- true // 4
-			}()
-			c1 <- false // 1
-			time.Sleep(time.Second / 10)
-			return <-c1 // 3 false
-		},
+		//w:    time.Second,
+		//F:    false,
 	}, 0)
-	<-c1 // 5 true
+	c := make(chan bool)
+	go func() {
+		defer close(c)
+		collection.Put(X1{
+			ID:   id2,
+			Type: "update",
+			Code: 1,
+			Name: 2, // <-- collision id1
+		}, 0)
+	}()
+	<-c
 	for _, index := range collection.Indexes {
 		t.Log(index.Field)
 		index.Range(func(key, value interface{}) bool {
@@ -137,31 +138,48 @@ func TestCollection_Put_update_with_collision(t *testing.T) {
 
 func TestCollection_Put_insert_with_collision(t *testing.T) {
 	collection := newCollection(t)
-	id1 := uuid.New()
+	c3 := make(chan bool)
+	c2 := make(chan bool)
 	id2 := uuid.New()
+	go func() {
+		collection.Put(X1{
+			ID:   id2,
+			Type: "insert",
+			Code: 0, // <-- collision id1
+			Name: 2,
+			F: func() bool {
+				return <-c2
+			},
+		}, 0)
+		c3 <- true
+	}()
 	c1 := make(chan bool)
-	collection.Put(X{
-		ID:   id1,
-		Type: "insert",
-		Code: 0, // <-- collision
-		Name: 1,
-		F: func() bool {
-			go func() {
-				c1 <- <-c1 // 2 false
-				collection.Put(X{
-					ID:   id2,
-					Type: "insert",
-					Code: 0, // <-- collision
-					Name: 2,
-				}, 0)
-				c1 <- true // 4
-			}()
-			c1 <- false // 1
-			time.Sleep(time.Second / 1)
-			return <-c1 // 3 false
-		},
-	}, 0)
-	<-c1 // 5 true
+	id1 := uuid.New()
+	go func() {
+		collection.Put(X1{
+			ID:   id1,
+			Type: "insert",
+			Code: 0,
+			Name: 1,
+			F: func() bool {
+				return <-c1
+			},
+		}, 0)
+		c3 <- true
+	}()
+	c1 <- true
+	c2 <- true
+	c1 <- true
+	c2 <- true
+	c1 <- true
+	c2 <- true
+	c1 <- true
+	c2 <- true
+	c1 <- false
+	c2 <- true
+	c2 <- true
+	<-c3
+	<-c3
 	for _, index := range collection.Indexes {
 		t.Log(index.Field)
 		index.Range(func(key, value interface{}) bool {
@@ -186,7 +204,7 @@ func TestCollection_Put(t *testing.T) {
 		// TODO: Add test cases.
 		{
 			args: args{
-				item: &X{
+				item: &X1{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae0000"),
 					Type: "audio",
 					Code: 0,
@@ -198,7 +216,7 @@ func TestCollection_Put(t *testing.T) {
 		},
 		{
 			args: args{
-				item: X{
+				item: X1{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae0000"),
 					Type: "audio",
 					Code: 1,
@@ -210,7 +228,7 @@ func TestCollection_Put(t *testing.T) {
 		},
 		{
 			args: args{
-				item: X{
+				item: X1{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
 					Type: "audio",
 					Code: 1,
@@ -222,7 +240,7 @@ func TestCollection_Put(t *testing.T) {
 		},
 		{
 			args: args{
-				item: X{
+				item: X1{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
 					Type: "audio",
 					Code: 0,
@@ -234,7 +252,7 @@ func TestCollection_Put(t *testing.T) {
 		},
 		{
 			args: args{
-				item: X{
+				item: X1{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
 					Type: "audio",
 					Code: 1,
@@ -246,7 +264,7 @@ func TestCollection_Put(t *testing.T) {
 		},
 		{
 			args: args{
-				item: X{
+				item: X1{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
 					Type: "audio",
 					Code: 2,
@@ -258,7 +276,7 @@ func TestCollection_Put(t *testing.T) {
 		},
 		{
 			args: args{
-				item: X{
+				item: X1{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
 					Type: "audio",
 					Code: 5,
@@ -271,7 +289,7 @@ func TestCollection_Put(t *testing.T) {
 		},
 		{
 			args: args{
-				item: X{
+				item: X1{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
 					Type: "audio",
 					Code: 6,
