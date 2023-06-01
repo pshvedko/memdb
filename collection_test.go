@@ -88,6 +88,42 @@ func BenchmarkCollection_Put(b *testing.B) {
 	}
 }
 
+// TestCollection_Put_update_with_collision
+//
+//  insert row1= code:1 name:1
+//  insert row2= code:2 name:2
+//
+//  update row1= code:2 name:1                  |
+//  row1.committed ? true                       *
+//    c.update(row1)                            |
+//      row1.Lock() <---------------------------X
+//        put index code:2 -> return row2       |
+//        row2.committed ? true                -*
+//                                              |
+//                                              |  update row2= code:1 name:2
+//                                              *- row2.committed ? true
+//                                              |    c.update(row2)
+//          SLEEP!!!                            X----> row2.Lock()
+//                                              |        put index code:1 -> return row1
+//                                              *-       row1.committed ? +
+//                                              |                         |
+//                                              |                         |
+//                                              |                         |
+//                                              |                         |
+//          rollback                            |                         |
+//      row1.Unlock() X------------------------->                         + true
+//                                              |          rollback
+//                                              <----X row2.Unlock()
+//                                              |
+//                                              |
+//  update row1= code:2 name:1                  |  update row2= code:1 name:2
+//  row1.committed ? true                      -*- row2.committed ? true
+//    c.update(row1)                            |    c.update(row2)
+//      row1.Lock() <---------------------------X----> row2.Lock()
+//        put index code:2 -> return row2       |        put index code:1 -> return row1
+//        row2.committed ???                DEAD*LOCK    row1.committed ???
+//                                              |
+//
 func TestCollection_Put_update_with_collision(t *testing.T) {
 	collection := newCollection(t)
 	id1 := uuid.New()
