@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"sync"
+	"sync/atomic"
 )
 
 type Mapper interface {
@@ -58,28 +59,28 @@ type Row struct {
 	sync.RWMutex
 }
 
-//var x int32
-//
-//func (r *Row) Lock() {
-//	println("Lock ", r, atomic.AddInt32(&x, 1))
-//	r.RWMutex.Lock()
-//
-//}
-//
-//func (r *Row) Unlock() {
-//	println("Unlock", r, atomic.AddInt32(&x, -1))
-//	r.RWMutex.Unlock()
-//}
-//
-//func (r *Row) RLock() {
-//	println("RLock ", r, atomic.AddInt32(&x, 1))
-//	r.RWMutex.RLock()
-//}
-//
-//func (r *Row) RUnlock() {
-//	println("RUnlock", r, atomic.AddInt32(&x, -1))
-//	r.RWMutex.RUnlock()
-//}
+var x int32
+
+func (r *Row) Lock() {
+	println("Lock ", r, atomic.AddInt32(&x, 1))
+	r.RWMutex.Lock()
+
+}
+
+func (r *Row) Unlock() {
+	println("Unlock", r, atomic.AddInt32(&x, -1))
+	r.RWMutex.Unlock()
+}
+
+func (r *Row) RLock() {
+	println("RLock ", r, atomic.AddInt32(&x, 1))
+	r.RWMutex.RLock()
+}
+
+func (r *Row) RUnlock() {
+	println("RUnlock", r, atomic.AddInt32(&x, -1))
+	r.RWMutex.RUnlock()
+}
 
 func (r *Row) committed() bool {
 	r.RLock()

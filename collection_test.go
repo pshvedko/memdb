@@ -2,15 +2,12 @@ package memdb
 
 import (
 	"fmt"
-	"github.com/google/uuid"
-	"oya.to/namedlocker"
 	"sync"
 	"testing"
-)
 
-type W interface {
-	Wait()
-}
+	"github.com/google/uuid"
+	"oya.to/namedlocker"
+)
 
 type X1 struct {
 	ID   uuid.UUID `json:"id"`
@@ -92,7 +89,6 @@ func BenchmarkCollection_Put(b *testing.B) {
 }
 
 func TestCollection_Put_update_with_collision(t *testing.T) {
-	//	t.Skip("deadlock")
 	collection := newCollection(t)
 	id1 := uuid.New()
 	id2 := uuid.New()
@@ -108,25 +104,37 @@ func TestCollection_Put_update_with_collision(t *testing.T) {
 		Code: 2,
 		Name: 2,
 	}, 0)
-	collection.Put(X1{
-		ID:   id1,
-		Type: "update",
-		Code: 2, // <-- collision id2
-		Name: 1,
-		//w:    time.Second,
-		//F:    false,
-	}, 0)
-	c := make(chan bool)
+	t.Log("update")
+	c1 := make(chan bool, 2)
+	c2 := make(chan bool, 2)
+	c3 := make(chan bool, 2)
 	go func() {
-		defer close(c)
+		collection.Put(X1{
+			ID:   id1,
+			Type: "update",
+			Code: 2, // <-- collision id2
+			Name: 1,
+			F: func() bool {
+				c2 <- <-c1
+				return true
+			},
+		}, 0)
+	}()
+	go func() {
 		collection.Put(X1{
 			ID:   id2,
 			Type: "update",
 			Code: 1,
 			Name: 2, // <-- collision id1
+			F: func() bool {
+				c1 <- <-c2
+				return true
+			},
 		}, 0)
 	}()
-	<-c
+	c2 <- true
+	<-c3
+	<-c3
 	for _, index := range collection.Indexes {
 		t.Log(index.Field)
 		index.Range(func(key, value interface{}) bool {
@@ -138,8 +146,10 @@ func TestCollection_Put_update_with_collision(t *testing.T) {
 
 func TestCollection_Put_insert_with_collision(t *testing.T) {
 	collection := newCollection(t)
-	c3 := make(chan bool)
-	c2 := make(chan bool)
+	c3 := make(chan bool, 2)
+	c2 := make(chan bool, 2)
+	c1 := make(chan bool, 2)
+	id1 := uuid.New()
 	id2 := uuid.New()
 	go func() {
 		collection.Put(X1{
@@ -148,13 +158,12 @@ func TestCollection_Put_insert_with_collision(t *testing.T) {
 			Code: 0, // <-- collision id1
 			Name: 2,
 			F: func() bool {
-				return <-c2
+				c1 <- <-c2
+				return true
 			},
 		}, 0)
 		c3 <- true
 	}()
-	c1 := make(chan bool)
-	id1 := uuid.New()
 	go func() {
 		collection.Put(X1{
 			ID:   id1,
@@ -162,22 +171,14 @@ func TestCollection_Put_insert_with_collision(t *testing.T) {
 			Code: 0,
 			Name: 1,
 			F: func() bool {
-				return <-c1
+				c2 <- <-c1
+				return false
 			},
 		}, 0)
+		c2 <- true
 		c3 <- true
 	}()
 	c1 <- true
-	c2 <- true
-	c1 <- true
-	c2 <- true
-	c1 <- true
-	c2 <- true
-	c1 <- true
-	c2 <- true
-	c1 <- false
-	c2 <- true
-	c2 <- true
 	<-c3
 	<-c3
 	for _, index := range collection.Indexes {
