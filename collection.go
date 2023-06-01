@@ -139,7 +139,7 @@ type Rollback struct {
 //    c.update(row1)                            |    c.update(row2)
 //      row1.Lock() <---------------------------+----> row2.Lock()
 //        put index code:2 -> return row2       |        put index code:1 -> return row1
-//        row2.committed ???                DEAD*LOCK    row1.committed() ???
+//        row2.committed ???                DEAD*LOCK    row1.committed ???
 //                                              |
 //
 func (c Collection) Put(item Item, cas uint64) (uint64, bool) {
