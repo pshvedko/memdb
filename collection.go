@@ -188,10 +188,9 @@ func (c Collection) rollback(rollbacks ...Rollback) (uint64, bool) {
 }
 
 func (c Collection) commit(row *Row, item Item, cas uint64, rollbacks ...Rollback) (uint64, bool) {
-	switch {
-	case cas == 0:
+	if cas == 0 {
 		cas = row.cas + 1
-	case cas <= row.cas:
+	} else if cas <= row.cas {
 		return 0, false
 	}
 	item, ok := item.Copy(row.Item)
