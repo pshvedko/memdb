@@ -55,8 +55,6 @@ type Tx struct {
 	tx *Tx
 }
 
-type Txx *Tx
-
 type Row struct {
 	Item
 	cas uint64
