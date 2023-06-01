@@ -3,6 +3,7 @@ package memdb
 import (
 	"fmt"
 	"github.com/google/uuid"
+	"oya.to/namedlocker"
 	"sync"
 	"testing"
 	"time"
@@ -46,24 +47,32 @@ func (x X) Field(name string) interface{} {
 	}
 }
 
-func BenchmarkCollection_Put(b *testing.B) {
-	collection := Collection{
+func newCollection(h testing.TB) Collection {
+	h.Helper()
+	return Collection{
 		Indexes: []Index{
 			{
 				Field:   []string{"id"},
 				Mapper:  &sync.Map{},
 				Indexer: fmt.Sprint,
+				Locker:  &namedlocker.Store{},
 			}, {
 				Field:   []string{"type", "name"},
 				Mapper:  &sync.Map{},
 				Indexer: fmt.Sprint,
+				Locker:  &namedlocker.Store{},
 			}, {
 				Field:   []string{"code"},
 				Mapper:  &sync.Map{},
 				Indexer: fmt.Sprint,
+				Locker:  &namedlocker.Store{},
 			},
 		},
 	}
+}
+
+func BenchmarkCollection_Put(b *testing.B) {
+	collection := newCollection(b)
 	for i := 0; i < b.N; i++ {
 		cas, ok := collection.Put(X{
 			ID:   uuid.UUID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(i >> 24), byte(i >> 16), byte(i >> 8), byte(i)},
@@ -79,23 +88,7 @@ func BenchmarkCollection_Put(b *testing.B) {
 
 func TestCollection_Put_update_with_collision(t *testing.T) {
 	t.Skip("deadlock")
-	collection := Collection{
-		Indexes: []Index{
-			{
-				Field:   []string{"id"},
-				Mapper:  &sync.Map{},
-				Indexer: fmt.Sprint,
-			}, {
-				Field:   []string{"type", "name"},
-				Mapper:  &sync.Map{},
-				Indexer: fmt.Sprint,
-			}, {
-				Field:   []string{"code"},
-				Mapper:  &sync.Map{},
-				Indexer: fmt.Sprint,
-			},
-		},
-	}
+	collection := newCollection(t)
 	id1 := uuid.New()
 	id2 := uuid.New()
 	collection.Put(X{
@@ -110,7 +103,7 @@ func TestCollection_Put_update_with_collision(t *testing.T) {
 		Code: 2,
 		Name: 2,
 	}, 0)
-	c1 := make(chan bool)
+	c1 := make(chan bool, 1)
 	collection.Put(X{
 		ID:   id1,
 		Type: "update",
@@ -143,23 +136,7 @@ func TestCollection_Put_update_with_collision(t *testing.T) {
 }
 
 func TestCollection_Put_insert_with_collision(t *testing.T) {
-	collection := Collection{
-		Indexes: []Index{
-			{
-				Field:   []string{"id"},
-				Mapper:  &sync.Map{},
-				Indexer: fmt.Sprint,
-			}, {
-				Field:   []string{"type", "name"},
-				Mapper:  &sync.Map{},
-				Indexer: fmt.Sprint,
-			}, {
-				Field:   []string{"code"},
-				Mapper:  &sync.Map{},
-				Indexer: fmt.Sprint,
-			},
-		},
-	}
+	collection := newCollection(t)
 	id1 := uuid.New()
 	id2 := uuid.New()
 	c1 := make(chan bool)
@@ -180,7 +157,7 @@ func TestCollection_Put_insert_with_collision(t *testing.T) {
 				c1 <- true // 4
 			}()
 			c1 <- false // 1
-			time.Sleep(time.Second / 10)
+			time.Sleep(time.Second / 1)
 			return <-c1 // 3 false
 		},
 	}, 0)
@@ -195,23 +172,7 @@ func TestCollection_Put_insert_with_collision(t *testing.T) {
 }
 
 func TestCollection_Put(t *testing.T) {
-	collection := Collection{
-		Indexes: []Index{
-			{
-				Field:   []string{"id"},
-				Mapper:  &sync.Map{},
-				Indexer: fmt.Sprint,
-			}, {
-				Field:   []string{"type", "name"},
-				Mapper:  &sync.Map{},
-				Indexer: fmt.Sprint,
-			}, {
-				Field:   []string{"code"},
-				Mapper:  &sync.Map{},
-				Indexer: fmt.Sprint,
-			},
-		},
-	}
+	collection := newCollection(t)
 	type args struct {
 		item Item
 		cas  uint64

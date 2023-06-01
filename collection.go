@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"sync"
+	"sync/atomic"
 )
 
 type Mapper interface {
@@ -17,10 +18,17 @@ type Mapper interface {
 
 type Indexer func(...interface{}) string
 
+type Locker interface {
+	Lock(key string)
+	TryUnlock(key string) error
+	Unlock(key string)
+}
+
 type Index struct {
 	Indexer
 	Mapper
 	Field []string
+	Locker
 }
 
 func (i Index) Put(key string, row *Row) (*Row, string, bool) {
@@ -51,6 +59,42 @@ type Row struct {
 	sync.RWMutex
 }
 
+//Lock  	+A
+//Unlock 	-A
+//Lock  	+B
+//Unlock 	-B
+//Lock  	+C
+//RLock  		+A
+//RUnlock 		-A
+//Lock  		+A
+//RLock  			+B
+//RUnlock 			-B
+//Unlock 		-A
+//Unlock 	-C
+
+var x int32
+
+func (r *Row) Lock() {
+	println("Lock ", r, atomic.AddInt32(&x, 1))
+	r.RWMutex.Lock()
+
+}
+
+func (r *Row) Unlock() {
+	println("Unlock", r, atomic.AddInt32(&x, -1))
+	r.RWMutex.Unlock()
+}
+
+func (r *Row) RLock() {
+	println("RLock ", r, atomic.AddInt32(&x, 1))
+	r.RWMutex.RLock()
+}
+
+func (r *Row) RUnlock() {
+	println("RUnlock", r, atomic.AddInt32(&x, -1))
+	r.RWMutex.RUnlock()
+}
+
 func (r *Row) committed() bool {
 	r.RLock()
 	defer r.RUnlock()
@@ -61,6 +105,41 @@ type Rollback struct {
 	key   string
 	index Index
 }
+
+// insert row1= code:1 name:1
+// insert row2= code:2 name:2
+//
+// update row1= code:2 name:1                    |
+//   row1.committed ? true                       *
+//     c.update(row1)                            |
+//       row1.Lock() <---------------------------+
+//         put index code:2 -> return row2       |
+//         row2.committed ? true                 *
+//                                               |
+//                                               | update row2= code:1 name:2
+//                                               *   row2.committed ? true
+//                                               |     c.update(row2)
+//           SLEEP!!!                            +-----> row2.Lock()
+//                                               |         put index code:1 -> return row1
+//                                               *         row1.committed ? +
+//                                               |                          |
+//                                               |                          |
+//                                               |                          |
+//                                               |                          |
+//           rollback                            |                          |
+//       row1.Unlock() X-------------------------+                          + true
+//                                               |           rollback
+//                                               +-----X row2.Unlock()
+//                                               |
+// ==============================================|==============================================
+//                                               |
+// update row1= code:2 name:1                    | update row2= code:1 name:2
+//   row1.committed ? true                       *   row2.committed ? true
+//     c.update(row1)                            |     c.update(row2)
+//       row1.Lock() <---------------------------+-----> row2.Lock()
+//         put index code:2 -> return row2       |         put index code:1 -> return row1
+//         row2.committed ???                DEAD*LOCK         row1.committed() ???
+//                                               |
 
 func (c Collection) Put(item Item, cas uint64) (uint64, bool) {
 	one := &Row{}
