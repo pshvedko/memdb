@@ -22,8 +22,7 @@ func (r *Row) acquire(t *Tx) bool {
 			return false
 		}
 	}
-	t.tx = r.tx
-	r.tx = t
+	t.tx, r.tx = r.tx, t
 	return true
 }
 
