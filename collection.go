@@ -1,12 +1,7 @@
 package memdb
 
-import (
-	"bytes"
-	"fmt"
-)
-
 type Mapper interface {
-	Load(key interface{}) (value interface{}, ok bool)
+	Load(key interface{}) (value []interface{}, ok bool)
 	Store(key, value interface{})
 	LoadOrStore(key, value interface{}) (actual interface{}, loaded bool)
 	LoadAndDelete(key interface{}) (value interface{}, loaded bool)
@@ -22,29 +17,6 @@ type Locker interface {
 	Unlock(key string)
 }
 
-type Index struct {
-	Indexer
-	Mapper
-	Field []string
-}
-
-func (i Index) Put(key string, row *Row) (*Row, string, bool) {
-	v, ok := i.LoadOrStore(key, row)
-	return v.(*Row), key, ok
-}
-
-func (i Index) Key(item Item) string {
-	var b bytes.Buffer
-	for _, f := range i.Field {
-		_, _ = fmt.Fprintf(&b, "::%v", item.Field(f))
-	}
-	return i.Indexer(b.String())
-}
-
-type Collection struct {
-	Indexes []Index
-}
-
 type Item interface {
 	Field(string) interface{}
 	Copy(Item) (Item, bool)
@@ -55,6 +27,60 @@ type Rollback struct {
 	index Index
 }
 
+type Index struct {
+	Indexer
+	Mapper
+	Field []string
+}
+
+func (i Index) Get(key string) (rows []*Row) {
+	vv, ok := i.Load(key)
+	if ok {
+		for _, v := range vv {
+			rows = append(rows, v.(*Row))
+		}
+	}
+	return
+}
+
+func (i Index) Put(key string, row *Row) (*Row, string, bool) {
+	v, ok := i.LoadOrStore(key, row)
+	return v.(*Row), key, ok
+}
+
+func (i Index) Key(item Item) string {
+	var values []interface{}
+	for _, f := range i.Field {
+		values = append(values, item.Field(f))
+	}
+	return i.Index(values...)
+}
+
+func (i Index) Index(values ...interface{}) string {
+	return i.Indexer(values...)
+}
+
+type Collection struct {
+	Indexes []Index
+}
+
+// Get ...
+func (c Collection) Get(tx *Tx, i int, values ...[]interface{}) []Item {
+	var rows []*Row
+	for _, value := range values {
+		rows = append(rows, c.Indexes[i].Get(c.Indexes[i].Index(value...))...)
+	}
+	var items []Item
+	for _, row := range rows {
+		item, _, ok := row.get(tx)
+		if ok {
+			items = append(items, item)
+		}
+	}
+	return items
+}
+
+// Put ...
 func (c Collection) Put(tx *Tx, item Item, cas uint64) (uint64, bool) {
 	one := &Row{}
 	one.lock(tx)

@@ -1,8 +1,8 @@
 package memdb
 
 import (
-	"fmt"
-	"sync"
+	"github.com/pshvedko/memdb/index"
+	"reflect"
 	"testing"
 
 	"github.com/google/uuid"
@@ -13,6 +13,7 @@ type X1 struct {
 	Type string    `json:"type"`
 	Code int       `json:"code"`
 	Name int       `json:"name"`
+	Ages []int     `json:"ages"`
 
 	F func() bool
 }
@@ -48,24 +49,39 @@ func (x X1) Field(name string) interface{} {
 	}
 }
 
-func newCollection(h testing.TB) Collection {
-	h.Helper()
-	return Collection{
+func newCollection(t testing.TB, items ...Item) Collection {
+	t.Helper()
+	collection := Collection{
 		Indexes: []Index{
 			{
 				Field:   []string{"id"},
-				Mapper:  &sync.Map{},
-				Indexer: fmt.Sprint,
+				Mapper:  &index.UniqueIndex{},
+				Indexer: index.Index,
 			}, {
 				Field:   []string{"type", "name"},
-				Mapper:  &sync.Map{},
-				Indexer: fmt.Sprint,
+				Mapper:  &index.UniqueIndex{},
+				Indexer: index.Index,
 			}, {
 				Field:   []string{"code"},
-				Mapper:  &sync.Map{},
-				Indexer: fmt.Sprint,
+				Mapper:  &index.UniqueIndex{},
+				Indexer: index.Index,
 			},
 		},
+	}
+	for _, item := range items {
+		collection.Put(&Tx{}, item, 0)
+	}
+	return collection
+}
+
+func printCollection(t testing.TB, collection Collection) {
+	t.Helper()
+	for _, i := range collection.Indexes {
+		t.Log(i.Field)
+		i.Range(func(key, value interface{}) bool {
+			t.Log(key, value)
+			return true
+		})
 	}
 }
 
@@ -169,13 +185,7 @@ func TestCollection_Put_update_with_collision(t *testing.T) {
 	c2 <- true
 	<-c3
 	<-c3
-	for _, index := range collection.Indexes {
-		t.Log(index.Field)
-		index.Range(func(key, value interface{}) bool {
-			t.Log(key, value)
-			return true
-		})
-	}
+	printCollection(t, collection)
 }
 
 func TestCollection_Put_insert_with_collision(t *testing.T) {
@@ -219,13 +229,7 @@ func TestCollection_Put_insert_with_collision(t *testing.T) {
 	<-c3
 	c2 <- true
 	<-c3
-	for _, index := range collection.Indexes {
-		t.Log(index.Field)
-		index.Range(func(key, value interface{}) bool {
-			t.Log(key, value)
-			return true
-		})
-	}
+	printCollection(t, collection)
 }
 
 func TestCollection_Put(t *testing.T) {
@@ -252,8 +256,7 @@ func TestCollection_Put(t *testing.T) {
 			},
 			cas: 1,
 			ok:  true,
-		},
-		{
+		}, {
 			args: args{
 				item: X1{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae0000"),
@@ -264,8 +267,7 @@ func TestCollection_Put(t *testing.T) {
 			},
 			cas: 2,
 			ok:  true,
-		},
-		{
+		}, {
 			args: args{
 				item: X1{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
@@ -276,8 +278,7 @@ func TestCollection_Put(t *testing.T) {
 			},
 			cas: 0,
 			ok:  false,
-		},
-		{
+		}, {
 			args: args{
 				item: X1{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
@@ -288,8 +289,7 @@ func TestCollection_Put(t *testing.T) {
 			},
 			cas: 1,
 			ok:  true,
-		},
-		{
+		}, {
 			args: args{
 				item: X1{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
@@ -300,8 +300,7 @@ func TestCollection_Put(t *testing.T) {
 			},
 			cas: 0,
 			ok:  false,
-		},
-		{
+		}, {
 			args: args{
 				item: X1{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
@@ -312,8 +311,7 @@ func TestCollection_Put(t *testing.T) {
 			},
 			cas: 2,
 			ok:  true,
-		},
-		{
+		}, {
 			args: args{
 				item: X1{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
@@ -325,8 +323,7 @@ func TestCollection_Put(t *testing.T) {
 			},
 			cas: 5,
 			ok:  true,
-		},
-		{
+		}, {
 			args: args{
 				item: X1{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
@@ -338,8 +335,7 @@ func TestCollection_Put(t *testing.T) {
 			},
 			cas: 0,
 			ok:  false,
-		},
-		{
+		}, {
 			args: args{
 				item: X1{
 					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
@@ -365,11 +361,78 @@ func TestCollection_Put(t *testing.T) {
 			}
 		})
 	}
-	for _, index := range collection.Indexes {
-		t.Log(index.Field)
-		index.Range(func(key, value interface{}) bool {
-			t.Log(key, value)
-			return true
+	printCollection(t, collection)
+}
+
+func TestCollection_Get(t *testing.T) {
+	id := []uuid.UUID{
+		uuid.New(),
+		uuid.New(),
+		uuid.New(),
+	}
+	item := []Item{
+		X1{
+			ID:   id[0],
+			Type: "get",
+			Code: 0,
+			Name: 0,
+			Ages: nil,
+		},
+		X1{
+			ID:   id[1],
+			Type: "get",
+			Code: 1,
+			Name: 1,
+			Ages: []int{},
+		},
+		X1{
+			ID:   id[2],
+			Type: "get",
+			Code: 2,
+			Name: 2,
+			Ages: []int{2},
+		},
+	}
+	collection := newCollection(t, item...)
+	type args struct {
+		tx     *Tx
+		i      int
+		values [][]interface{}
+	}
+	tests := []struct {
+		name string
+		args args
+		want []Item
+	}{
+		// TODO: Add test cases.
+		{
+			args: args{
+				tx:     &Tx{},
+				i:      0,
+				values: [][]interface{}{{id[1]}},
+			},
+			want: []Item{item[1]},
+		}, {
+			args: args{
+				tx:     &Tx{},
+				i:      1,
+				values: [][]interface{}{{"get", 1}},
+			},
+			want: []Item{item[1]},
+		}, {
+			args: args{
+				tx:     &Tx{},
+				i:      2,
+				values: [][]interface{}{{1}},
+			},
+			want: []Item{item[1]},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := collection.Get(tt.args.tx, tt.args.i, tt.args.values...); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Get() = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }

@@ -70,3 +70,13 @@ func (r *Row) committed(tx *Tx) bool {
 	}
 	return true
 }
+
+func (r *Row) get(tx *Tx) (Item, uint64, bool) {
+	if r.read(tx) {
+		defer r.unread(tx)
+		if r.Item != nil && r.cas > 0 {
+			return r.Item, r.cas, true
+		}
+	}
+	return nil, 0, false
+}
