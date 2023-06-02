@@ -32,8 +32,7 @@ func (r *Row) release(t *Tx) {
 	defer r.mx.Unlock()
 	for x := &r.tx; *x != nil; x = &(*x).tx {
 		if t == *x {
-			*x = t.tx
-			t.tx = nil
+			*x, t.tx = t.tx, nil
 			return
 		}
 	}
