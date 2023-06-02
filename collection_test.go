@@ -2,8 +2,9 @@ package memdb
 
 import (
 	"github.com/pshvedko/memdb/index"
-	"reflect"
+	"github.com/stretchr/testify/assert"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -11,9 +12,10 @@ import (
 type X1 struct {
 	ID   uuid.UUID `json:"id"`
 	Type string    `json:"type"`
-	Code int       `json:"code"`
 	Name int       `json:"name"`
+	Code int       `json:"code"`
 	Ages []int     `json:"ages"`
+	Time time.Time `json:"time"`
 
 	F func() bool
 }
@@ -44,6 +46,8 @@ func (x X1) Field(name string) interface{} {
 		return x.Code
 	case "name":
 		return x.Name
+	case "time":
+		return x.Time.UTC()
 	default:
 		panic(name)
 	}
@@ -64,6 +68,10 @@ func newCollection(t testing.TB, items ...Item) Collection {
 			}, {
 				Field:   []string{"code"},
 				Mapper:  &index.UniqueIndex{},
+				Indexer: index.Index,
+			}, {
+				Field:   []string{"time"},
+				Mapper:  &index.NonUniqueIndex{},
 				Indexer: index.Index,
 			},
 		},
@@ -369,6 +377,7 @@ func TestCollection_Get(t *testing.T) {
 		uuid.New(),
 		uuid.New(),
 		uuid.New(),
+		uuid.New(),
 	}
 	item := []Item{
 		X1{
@@ -391,6 +400,14 @@ func TestCollection_Get(t *testing.T) {
 			Code: 2,
 			Name: 2,
 			Ages: []int{2},
+		},
+		X1{
+			ID:   id[3],
+			Type: "get",
+			Code: 3,
+			Name: 3,
+			Ages: []int{3, 3},
+			Time: time.Now().UTC(),
 		},
 	}
 	collection := newCollection(t, item...)
@@ -426,13 +443,21 @@ func TestCollection_Get(t *testing.T) {
 				values: [][]interface{}{{1}},
 			},
 			want: []Item{item[1]},
+		}, {
+			args: args{
+				tx:     &Tx{},
+				i:      3,
+				values: [][]interface{}{{time.Time{}}},
+			},
+			want: []Item{item[0], item[1], item[2]},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := collection.Get(tt.args.tx, tt.args.i, tt.args.values...); !reflect.DeepEqual(got, tt.want) {
+			if got := collection.Get(tt.args.tx, tt.args.i, tt.args.values...); !assert.ElementsMatch(t, got, tt.want) {
 				t.Errorf("Get() = %v, want %v", got, tt.want)
 			}
 		})
 	}
+	printCollection(t, collection)
 }

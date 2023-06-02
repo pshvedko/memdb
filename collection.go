@@ -1,7 +1,7 @@
 package memdb
 
 type Mapper interface {
-	Load(key interface{}) (value []interface{}, ok bool)
+	Load(key interface{}) (values []interface{}, ok bool)
 	Store(key, value interface{})
 	LoadOrStore(key, value interface{}) (actual interface{}, loaded bool)
 	LoadAndDelete(key interface{}) (value interface{}, loaded bool)
@@ -128,10 +128,13 @@ func (c Collection) insert(tx *Tx, row *Row, item Item, cas uint64, rollbacks ..
 	index:
 		one, ok := index.Put(key, row)
 		if ok {
-			if one.committed(tx) {
-				return c.rollback(rollbacks...)
+			if one != row {
+				if one.committed(tx) {
+					return c.rollback(rollbacks...)
+				}
+				goto index
 			}
-			goto index
+			continue
 		}
 		rollbacks = append(rollbacks, Rollback{index: index, row: row, key: key})
 	}
