@@ -10,6 +10,10 @@ type UniqueIndex struct {
 	sync.Map
 }
 
+func (i *UniqueIndex) Unique() bool {
+	return true
+}
+
 func (i *UniqueIndex) Load(key interface{}) ([]interface{}, bool) {
 	v, ok := i.Map.Load(key)
 	if ok {
@@ -18,8 +22,16 @@ func (i *UniqueIndex) Load(key interface{}) ([]interface{}, bool) {
 	return nil, false
 }
 
+func (i *UniqueIndex) Delete(key, _ interface{}) {
+	i.Map.Delete(key)
+}
+
 type NonUniqueIndex struct {
 	sync.Map
+}
+
+func (i *NonUniqueIndex) Unique() bool {
+	return false
 }
 
 func Index(values ...interface{}) string {

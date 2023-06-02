@@ -5,8 +5,9 @@ type Mapper interface {
 	Store(key, value interface{})
 	LoadOrStore(key, value interface{}) (actual interface{}, loaded bool)
 	LoadAndDelete(key interface{}) (value interface{}, loaded bool)
-	Delete(key interface{})
+	Delete(key, value interface{})
 	Range(f func(key, value interface{}) bool)
+	Unique() bool
 }
 
 type Indexer func(...interface{}) string
@@ -24,6 +25,7 @@ type Item interface {
 
 type Rollback struct {
 	key   string
+	row   *Row
 	index Index
 }
 
@@ -43,9 +45,9 @@ func (i Index) Get(key string) (rows []*Row) {
 	return
 }
 
-func (i Index) Put(key string, row *Row) (*Row, string, bool) {
+func (i Index) Put(key string, row *Row) (*Row, bool) {
 	v, ok := i.LoadOrStore(key, row)
-	return v.(*Row), key, ok
+	return v.(*Row), ok
 }
 
 func (i Index) Key(item Item) string {
@@ -85,15 +87,16 @@ func (c Collection) Put(tx *Tx, item Item, cas uint64) (uint64, bool) {
 	one := &Row{}
 	one.lock(tx)
 	defer one.unlock(tx)
+	key := c.Indexes[0].Key(item)
 index:
-	row, key, ok := c.Indexes[0].Put(c.Indexes[0].Key(item), one)
+	row, ok := c.Indexes[0].Put(key, one)
 	if ok {
 		if row.committed(tx) {
 			return c.update(tx, row, item, cas)
 		}
 		goto index
 	}
-	return c.insert(tx, row, item, cas, Rollback{index: c.Indexes[0], key: key})
+	return c.insert(tx, row, item, cas, Rollback{index: c.Indexes[0], row: row, key: key})
 }
 
 func (c Collection) update(tx *Tx, row *Row, item Item, cas uint64) (uint64, bool) {
@@ -101,8 +104,9 @@ func (c Collection) update(tx *Tx, row *Row, item Item, cas uint64) (uint64, boo
 	defer row.unlock(tx)
 	var rollbacks, unleashes []Rollback
 	for _, index := range c.Indexes[1:] {
+		key := index.Key(item)
 	index:
-		one, key, ok := index.Put(index.Key(item), row)
+		one, ok := index.Put(key, row)
 		if ok {
 			if one != row {
 				if one.committed(tx) {
@@ -112,30 +116,31 @@ func (c Collection) update(tx *Tx, row *Row, item Item, cas uint64) (uint64, boo
 			}
 			continue
 		}
-		rollbacks = append(rollbacks, Rollback{index: index, key: key})
-		unleashes = append(unleashes, Rollback{index: index, key: index.Key(row)})
+		rollbacks = append(rollbacks, Rollback{index: index, row: row, key: key})
+		unleashes = append(unleashes, Rollback{index: index, row: row, key: index.Key(row)})
 	}
 	return c.end(rollbacks, row, item, cas, unleashes...)
 }
 
 func (c Collection) insert(tx *Tx, row *Row, item Item, cas uint64, rollbacks ...Rollback) (uint64, bool) {
 	for _, index := range c.Indexes[1:] {
+		key := index.Key(item)
 	index:
-		one, key, ok := index.Put(index.Key(item), row)
+		one, ok := index.Put(key, row)
 		if ok {
 			if one.committed(tx) {
 				return c.rollback(rollbacks...)
 			}
 			goto index
 		}
-		rollbacks = append(rollbacks, Rollback{key: key, index: index})
+		rollbacks = append(rollbacks, Rollback{index: index, row: row, key: key})
 	}
 	return c.end(rollbacks, row, item, cas)
 }
 
 func (c Collection) rollback(rollbacks ...Rollback) (uint64, bool) {
 	for _, r := range rollbacks {
-		r.index.Delete(r.key)
+		r.index.Delete(r.key, r.row)
 	}
 	return 0, false
 }
