@@ -16,11 +16,11 @@ type X1 struct {
 	Ages []int     `json:"ages"`
 	Time time.Time `json:"time"`
 
-	F func() bool
+	F func(string) bool
 }
 
 func (x X1) Copy(item Item) (Item, bool) {
-	if x.F != nil && !x.F() {
+	if x.F != nil && !x.F("=") {
 		return nil, false
 	}
 	switch item.(type) {
@@ -34,7 +34,7 @@ func (x X1) Copy(item Item) (Item, bool) {
 
 func (x X1) Field(name string) interface{} {
 	if x.F != nil {
-		x.F()
+		x.F(name)
 	}
 	switch name {
 	case "id":
@@ -160,18 +160,17 @@ func TestCollection_Put_update_with_collision(t *testing.T) {
 		Code: 2,
 		Name: 2,
 	}, 0)
-	c1 := make(chan bool, 2)
-	c2 := make(chan bool, 2)
-	c3 := make(chan bool, 2)
+	c1 := make(chan bool)
+	c2 := make(chan bool)
+	c3 := make(chan bool)
 	go func() {
 		collection.Put(&Tx{}, X1{
 			ID:   id1,
 			Type: "update",
 			Code: 2, // <-- collision id2
 			Name: 1,
-			F: func() bool {
-				c2 <- <-c1
-				return true
+			F: func(string) bool {
+				return <-c1
 			},
 		}, 0)
 		c3 <- true
@@ -182,13 +181,19 @@ func TestCollection_Put_update_with_collision(t *testing.T) {
 			Type: "update",
 			Code: 1,
 			Name: 2, // <-- collision id1
-			F: func() bool {
-				c1 <- <-c2
-				return true
+			F: func(string) bool {
+				return <-c2
 			},
 		}, 0)
 		c3 <- true
 	}()
+	c1 <- true
+	c2 <- true
+	c1 <- true
+	c2 <- true
+	c1 <- true
+	c2 <- true
+	c1 <- true
 	c2 <- true
 	<-c3
 	<-c3
@@ -197,9 +202,9 @@ func TestCollection_Put_update_with_collision(t *testing.T) {
 
 func TestCollection_Put_insert_with_collision(t *testing.T) {
 	collection := newCollection(t)
-	c3 := make(chan bool, 2)
-	c2 := make(chan bool, 2)
-	c1 := make(chan bool, 2)
+	c3 := make(chan bool)
+	c2 := make(chan bool)
+	c1 := make(chan bool)
 	id1 := uuid.New()
 	id2 := uuid.New()
 	go func() {
@@ -208,9 +213,8 @@ func TestCollection_Put_insert_with_collision(t *testing.T) {
 			Type: "insert",
 			Code: 0, // <-- collision id1
 			Name: 2,
-			F: func() bool {
-				<-c2
-				return true
+			F: func(string) bool {
+				return <-c2
 			},
 		}, 0)
 		c3 <- true
@@ -221,21 +225,25 @@ func TestCollection_Put_insert_with_collision(t *testing.T) {
 			Type: "insert",
 			Code: 0,
 			Name: 1,
-			F: func() bool {
-				c2 <- <-c1
-				return false
+			F: func(string) bool {
+				return <-c1
 			},
 		}, 0)
 		c3 <- true
 	}()
 	c1 <- true
-	c1 <- true
-	c1 <- true
-	c1 <- true
-	c1 <- true
-	c1 <- true
-	<-c3
 	c2 <- true
+	c1 <- true
+	c2 <- true
+	c1 <- true
+	c2 <- true
+	c1 <- true
+	c2 <- true
+	c1 <- true
+	c1 <- false
+	c2 <- true
+	c2 <- true
+	<-c3
 	<-c3
 	printCollection(t, collection)
 }
@@ -350,7 +358,7 @@ func TestCollection_Put(t *testing.T) {
 					Type: "audio",
 					Code: 6,
 					Name: 6,
-					F:    func() bool { return false },
+					F:    func(string) bool { return false },
 				},
 				cas: 6,
 			},
