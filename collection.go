@@ -23,12 +23,13 @@ type Collection struct {
 }
 
 // Delete ...
-func (c Collection) Delete(_ *Tx, item Item) bool {
-	row, ok := c.Indexes[0].LoadAndDelete(c.Indexes[0].Key(item), nil)
+func (c Collection) Delete(tx *Tx, item Item) bool {
+	row, ok := c.Indexes[0].Pop(c.Indexes[0].Key(item), nil)
 	if ok {
 		for _, index := range c.Indexes[1:] {
 			index.LoadAndDelete(index.Key(item), row)
 		}
+		row.delete(tx)
 	}
 	return ok
 }

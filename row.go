@@ -80,3 +80,9 @@ func (r *Row) get(tx *Tx) (Item, uint64, bool) {
 	}
 	return nil, 0, false
 }
+
+func (r *Row) delete(tx *Tx) {
+	r.lock(tx)
+	defer r.unlock(tx)
+	r.Item, r.cas = nil, 0
+}

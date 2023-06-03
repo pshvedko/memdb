@@ -40,6 +40,14 @@ func (i Index) Index(values ...interface{}) string {
 	return i.Indexer(values...)
 }
 
+func (i Index) Pop(key string, row *Row) (*Row, bool) {
+	v, ok := i.LoadAndDelete(key, row)
+	if ok {
+		return v.(*Row), true
+	}
+	return nil, false
+}
+
 func Format(values ...interface{}) string {
 	var b bytes.Buffer
 	for _, value := range values {
