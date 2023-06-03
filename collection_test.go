@@ -94,9 +94,8 @@ func printCollection(t testing.TB, collection Collection) {
 
 func BenchmarkCollection_Put(b *testing.B) {
 	collection := newCollection(b)
-	var tx Tx
 	for i := 0; i < b.N; i++ {
-		cas, ok := collection.Put(&tx, X1{
+		cas, ok := collection.Put(&Tx{}, X1{
 			ID:   uuid.UUID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(i >> 24), byte(i >> 16), byte(i >> 8), byte(i)},
 			Type: "audio",
 			Code: i,
@@ -254,6 +253,8 @@ func TestCollection_Put(t *testing.T) {
 		item Item
 		cas  uint64
 	}
+	id1 := uuid.New()
+	id2 := uuid.New()
 	tests := []struct {
 		name string
 		args args
@@ -264,7 +265,7 @@ func TestCollection_Put(t *testing.T) {
 		{
 			args: args{
 				item: &X1{
-					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae0000"),
+					ID:   id1,
 					Type: "audio",
 					Code: 0,
 					Name: 0,
@@ -275,7 +276,7 @@ func TestCollection_Put(t *testing.T) {
 		}, {
 			args: args{
 				item: X1{
-					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae0000"),
+					ID:   id1,
 					Type: "audio",
 					Code: 1,
 					Name: 1,
@@ -286,7 +287,7 @@ func TestCollection_Put(t *testing.T) {
 		}, {
 			args: args{
 				item: X1{
-					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
+					ID:   id2,
 					Type: "audio",
 					Code: 1,
 					Name: 2,
@@ -297,7 +298,7 @@ func TestCollection_Put(t *testing.T) {
 		}, {
 			args: args{
 				item: X1{
-					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
+					ID:   id2,
 					Type: "audio",
 					Code: 0,
 					Name: 3,
@@ -308,7 +309,7 @@ func TestCollection_Put(t *testing.T) {
 		}, {
 			args: args{
 				item: X1{
-					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
+					ID:   id2,
 					Type: "audio",
 					Code: 1,
 					Name: 4,
@@ -319,7 +320,7 @@ func TestCollection_Put(t *testing.T) {
 		}, {
 			args: args{
 				item: X1{
-					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
+					ID:   id2,
 					Type: "audio",
 					Code: 2,
 					Name: 5,
@@ -330,7 +331,7 @@ func TestCollection_Put(t *testing.T) {
 		}, {
 			args: args{
 				item: X1{
-					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
+					ID:   id2,
 					Type: "audio",
 					Code: 5,
 					Name: 5,
@@ -342,7 +343,7 @@ func TestCollection_Put(t *testing.T) {
 		}, {
 			args: args{
 				item: X1{
-					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
+					ID:   id2,
 					Type: "audio",
 					Code: 6,
 					Name: 6,
@@ -354,7 +355,7 @@ func TestCollection_Put(t *testing.T) {
 		}, {
 			args: args{
 				item: X1{
-					ID:   uuid.MustParse("0a2f37be-6e18-4944-8273-9db2a0ae1111"),
+					ID:   id2,
 					Type: "audio",
 					Code: 6,
 					Name: 6,
