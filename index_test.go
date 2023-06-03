@@ -1,8 +1,8 @@
-package index
+package memdb
 
 import "testing"
 
-func TestIndex(t *testing.T) {
+func TestFormat(t *testing.T) {
 	type args struct {
 		values []interface{}
 	}
@@ -21,8 +21,8 @@ func TestIndex(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := Index(tt.args.values...); got != tt.want {
-				t.Errorf("Index() = %v, want %v", got, tt.want)
+			if got := Format(tt.args.values...); got != tt.want {
+				t.Errorf("Format() = %v, want %v", got, tt.want)
 			}
 		})
 	}

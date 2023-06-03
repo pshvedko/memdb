@@ -1,7 +1,6 @@
 package memdb
 
 import (
-	"github.com/pshvedko/memdb/index"
 	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
@@ -59,20 +58,20 @@ func newCollection(t testing.TB, items ...Item) Collection {
 		Indexes: []Index{
 			{
 				Field:   []string{"id"},
-				Mapper:  &index.UniqueIndex{},
-				Indexer: index.Index,
+				Mapper:  &UniqueIndex{},
+				Indexer: Format,
 			}, {
 				Field:   []string{"type", "name"},
-				Mapper:  &index.UniqueIndex{},
-				Indexer: index.Index,
+				Mapper:  &UniqueIndex{},
+				Indexer: Format,
 			}, {
 				Field:   []string{"code"},
-				Mapper:  &index.UniqueIndex{},
-				Indexer: index.Index,
+				Mapper:  &UniqueIndex{},
+				Indexer: Format,
 			}, {
 				Field:   []string{"time"},
-				Mapper:  &index.NonUniqueIndex{},
-				Indexer: index.Index,
+				Mapper:  &NonUniqueIndex{},
+				Indexer: Format,
 			},
 		},
 	}
@@ -198,9 +197,9 @@ func TestCollection_Put_update_with_collision(t *testing.T) {
 
 func TestCollection_Put_insert_with_collision(t *testing.T) {
 	collection := newCollection(t)
-	c3 := make(chan bool, 1)
-	c2 := make(chan bool, 1)
-	c1 := make(chan bool, 1)
+	c3 := make(chan bool, 2)
+	c2 := make(chan bool, 2)
+	c1 := make(chan bool, 2)
 	id1 := uuid.New()
 	id2 := uuid.New()
 	go func() {
@@ -229,6 +228,7 @@ func TestCollection_Put_insert_with_collision(t *testing.T) {
 		}, 0)
 		c3 <- true
 	}()
+	c1 <- true
 	c1 <- true
 	c1 <- true
 	c1 <- true

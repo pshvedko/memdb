@@ -1,4 +1,4 @@
-package index
+package memdb
 
 import (
 	"bytes"
@@ -90,7 +90,7 @@ func (i *NonUniqueIndex) Unique() bool {
 	return false
 }
 
-func Index(values ...interface{}) string {
+func Format(values ...interface{}) string {
 	var b bytes.Buffer
 	for _, value := range values {
 		_, _ = fmt.Fprintf(&b, "::%v", value)
