@@ -46,7 +46,7 @@ func (x X1) Field(name string) interface{} {
 	case "name":
 		return x.Name
 	case "time":
-		return x.Time.UTC()
+		return x.Time.UTC().Truncate(time.Second)
 	default:
 		panic(name)
 	}
