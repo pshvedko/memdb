@@ -415,7 +415,7 @@ func TestCollection_Get(t *testing.T) {
 			Code: 3,
 			Name: 3,
 			Ages: []int{3, 3},
-			Time: time.Now().UTC(),
+			Time: time.Now(),
 		},
 	}
 	collection := newCollection(t, item...)
@@ -464,6 +464,79 @@ func TestCollection_Get(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := collection.Get(tt.args.tx, tt.args.i, tt.args.values...); !assert.ElementsMatch(t, got, tt.want) {
 				t.Errorf("Get() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+	printCollection(t, collection)
+}
+
+func TestCollection_Delete(t *testing.T) {
+	id := []uuid.UUID{
+		uuid.New(),
+		uuid.New(),
+		uuid.New(),
+		uuid.New(),
+	}
+	item := []Item{
+		X1{
+			ID:   id[0],
+			Type: "get",
+			Code: 0,
+			Name: 0,
+			Ages: nil,
+		},
+		X1{
+			ID:   id[1],
+			Type: "get",
+			Code: 1,
+			Name: 1,
+			Ages: []int{},
+		},
+		X1{
+			ID:   id[2],
+			Type: "get",
+			Code: 2,
+			Name: 2,
+			Ages: []int{2},
+		},
+		X1{
+			ID:   id[3],
+			Type: "get",
+			Code: 3,
+			Name: 3,
+			Ages: []int{3, 3},
+			Time: time.Now(),
+		},
+	}
+	collection := newCollection(t, item...)
+	type args struct {
+		tx   *Tx
+		item Item
+	}
+	tests := []struct {
+		name string
+		args args
+		want bool
+	}{
+		// TODO: Add test cases.
+		{
+			args: args{
+				tx:   &Tx{},
+				item: item[1],
+			},
+			want: true,
+		}, {
+			args: args{
+				tx:   &Tx{},
+				item: item[1],
+			},
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := collection.Delete(tt.args.tx, tt.args.item); got != tt.want {
+				t.Errorf("Delete() = %v, want %v", got, tt.want)
 			}
 		})
 	}

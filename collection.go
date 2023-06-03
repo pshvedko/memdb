@@ -1,10 +1,10 @@
 package memdb
 
 type Mapper interface {
-	Load(key interface{}) (values []interface{}, ok bool)
-	LoadOrStore(key, value interface{}) (actual interface{}, loaded bool)
-	Delete(key, value interface{})
-	Range(f func(key, value interface{}) bool)
+	Load(key interface{}) ([]interface{}, bool)
+	LoadOrStore(interface{}, interface{}) (interface{}, bool)
+	LoadAndDelete(interface{}, interface{}) (interface{}, bool)
+	Range(func(interface{}, interface{}) bool)
 }
 
 type Item interface {
@@ -18,43 +18,19 @@ type Rollback struct {
 	index Index
 }
 
-type Indexer func(...interface{}) string
-
-type Index struct {
-	Indexer
-	Mapper
-	Field []string
-}
-
-func (i Index) Get(key string) (rows []*Row) {
-	vv, ok := i.Load(key)
-	if ok {
-		for _, v := range vv {
-			rows = append(rows, v.(*Row))
-		}
-	}
-	return
-}
-
-func (i Index) Put(key string, row *Row) (*Row, bool) {
-	v, ok := i.LoadOrStore(key, row)
-	return v.(*Row), ok
-}
-
-func (i Index) Key(item Item) string {
-	var values []interface{}
-	for _, f := range i.Field {
-		values = append(values, item.Field(f))
-	}
-	return i.Index(values...)
-}
-
-func (i Index) Index(values ...interface{}) string {
-	return i.Indexer(values...)
-}
-
 type Collection struct {
 	Indexes []Index
+}
+
+// Delete ...
+func (c Collection) Delete(_ *Tx, item Item) bool {
+	row, ok := c.Indexes[0].LoadAndDelete(c.Indexes[0].Key(item), nil)
+	if ok {
+		for _, index := range c.Indexes[1:] {
+			index.LoadAndDelete(index.Key(item), row)
+		}
+	}
+	return ok
 }
 
 // Get ...
@@ -134,7 +110,7 @@ func (c Collection) insert(tx *Tx, row *Row, item Item, cas uint64, rollbacks ..
 
 func (c Collection) rollback(rollbacks ...Rollback) (uint64, bool) {
 	for _, r := range rollbacks {
-		r.index.Delete(r.key, r.row)
+		r.index.LoadAndDelete(r.key, r.row)
 	}
 	return 0, false
 }
