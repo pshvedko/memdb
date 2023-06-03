@@ -2,20 +2,9 @@ package memdb
 
 type Mapper interface {
 	Load(key interface{}) (values []interface{}, ok bool)
-	Store(key, value interface{})
 	LoadOrStore(key, value interface{}) (actual interface{}, loaded bool)
-	LoadAndDelete(key interface{}) (value interface{}, loaded bool)
 	Delete(key, value interface{})
 	Range(f func(key, value interface{}) bool)
-	Unique() bool
-}
-
-type Indexer func(...interface{}) string
-
-type Locker interface {
-	Lock(key string)
-	TryUnlock(key string) error
-	Unlock(key string)
 }
 
 type Item interface {
@@ -28,6 +17,8 @@ type Rollback struct {
 	row   *Row
 	index Index
 }
+
+type Indexer func(...interface{}) string
 
 type Index struct {
 	Indexer
