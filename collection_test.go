@@ -513,11 +513,13 @@ func TestCollection_Delete(t *testing.T) {
 	type args struct {
 		tx   *Tx
 		item Item
+		cas  uint64
 	}
 	tests := []struct {
 		name string
 		args args
-		want bool
+		cas  uint64
+		ok   bool
 	}{
 		// TODO: Add test cases.
 		{
@@ -525,19 +527,31 @@ func TestCollection_Delete(t *testing.T) {
 				tx:   &Tx{},
 				item: item[1],
 			},
-			want: true,
+			cas: 2,
+			ok:  true,
 		}, {
 			args: args{
 				tx:   &Tx{},
 				item: item[1],
 			},
-			want: false,
+			ok: false,
+		}, {
+			args: args{
+				tx:   &Tx{},
+				item: item[0],
+				cas:  1,
+			},
+			ok: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := collection.Delete(tt.args.tx, tt.args.item); got != tt.want {
-				t.Errorf("Delete() = %v, want %v", got, tt.want)
+			cas, ok := collection.Delete(tt.args.tx, tt.args.item, tt.args.cas)
+			if cas != tt.cas {
+				t.Errorf("Delete() cas = %v, want %v", cas, tt.cas)
+			}
+			if ok != tt.ok {
+				t.Errorf("Delete() ok = %v, want %v", ok, tt.ok)
 			}
 		})
 	}

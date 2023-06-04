@@ -23,15 +23,30 @@ type Collection struct {
 }
 
 // Delete ...
-func (c Collection) Delete(tx *Tx, item Item) bool {
-	row, ok := c.Indexes[0].Pop(c.Indexes[0].Key(item), nil)
-	if ok {
-		for _, index := range c.Indexes[1:] {
-			index.LoadAndDelete(index.Key(item), row)
-		}
-		row.delete(tx)
+func (c Collection) Delete(tx *Tx, item Item, cas uint64) (uint64, bool) {
+	key := c.Indexes[0].Key(item)
+	row := c.Indexes[0].Get(key)
+	if len(row) == 0 {
+		return 0, false
 	}
-	return ok
+	return c.delete(tx, key, row[0], item, cas)
+}
+
+func (c Collection) delete(tx *Tx, key string, row *Row, item Item, cas uint64) (uint64, bool) {
+	row.lock(tx)
+	defer row.unlock(tx)
+	if cas == 0 {
+		cas = row.cas + 1
+	} else if cas <= row.cas {
+		return 0, false
+	}
+	c.Indexes[0].LoadAndDelete(key, row)
+	for _, index := range c.Indexes[1:] {
+		index.LoadAndDelete(index.Key(item), row)
+	}
+	row.Item = nil
+	row.cas = 0
+	return cas, true
 }
 
 // Get ...
